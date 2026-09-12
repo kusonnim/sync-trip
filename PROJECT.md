@@ -10,7 +10,7 @@
 
 ## 2. Core Features
 
-1. **Place Cart & Ranked Voting:** Team members collect desired locations and each submits a personal 1~n ranking. Borda scores are summed to pick the candidates (4 slots per travel day, plus any place the host marked as required).
+1. **Place Cart & Ranked Voting:** Team members add as many places as they like to a shared cart, then each picks a personal **top 3** from it. Borda scores (3/2/1) are summed to choose the candidates (4 slots per travel day, plus any place the host marked as required). A place that was only added, never ranked, scores 0.
 2. **Hybrid Constraint Settings:**
 * Automatic fetching of basic business hours (or utilizing fallback mock DB for testing).
 * The host can manually override/set **Hard Constraints** (e.g., "Dinner reservation at 6:00 PM").
@@ -87,7 +87,8 @@ have read-only table access for Realtime. `acquire_optimization_lock` atomically
 uses database time for a two-minute stale threshold, and stores a UUID nonce. Completion/failure
 RPCs require that same nonce, so an abandoned run cannot overwrite a recovered one.
 
-One Supabase Realtime channel watches the seven room tables. Every room-scoped change coalesces into
+Scheduled visit windows are stored in the existing `room_places.hard_constraint` JSONB and exposed
+to the UI as `{ start, end }`. One Supabase Realtime channel watches the seven room tables. Every room-scoped change coalesces into
 one `get_room_snapshot` RPC, producing a coherent camelCase view for the existing screens. RLS is
 enabled on every table, but the accountless design cannot prove ownership of a client-generated
 member ID and read access needed for anonymous Realtime is not private. Supabase Auth or a trusted

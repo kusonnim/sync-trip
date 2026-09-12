@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Screen from '../components/Screen';
 import { patchRoom } from '../lib/roomStore';
-import { picksPerPerson } from '../lib/preference';
+import { TOP_N, SLOTS_PER_DAY } from '../lib/preference';
 import { daysBetween } from '../lib/time';
 
 export default function RoomLobby({ room, isHost }) {
@@ -10,7 +10,6 @@ export default function RoomLobby({ room, isHost }) {
   const [error, setError] = useState('');
   const link = `${window.location.origin}/r/${room.code}`;
   const dayCount = daysBetween(room.startDate, room.endDate);
-  const k = picksPerPerson(dayCount, room.headcount);
 
   async function copy() {
     try {
@@ -28,43 +27,50 @@ export default function RoomLobby({ room, isHost }) {
     try {
       await patchRoom(room.code, { status: 'collecting' });
     } catch {
-      setError('Could not advance the room. Check your connection and try again.');
+      setError('방을 다음 단계로 넘기지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
       setStarting(false);
     }
   }
 
   return (
     <Screen
-      step={3}
-      title="Waiting for Members"
+      title="팀원을 기다리는 중"
       subtitle={room.title}
       footer={
         isHost ? (
           <button
             className="btn-primary"
-            disabled={room.members.length < 2 || starting}
+            disabled={starting}
             onClick={start}
           >
-            {starting ? 'Starting...' : room.members.length < 2 ? 'Waiting for One More Member' : 'Start Adding Place Preferences'}
+            {starting
+              ? '시작하는 중...'
+              : room.members.length < room.headcount
+              ? `${room.members.length}명으로 먼저 시작하기`
+              : '희망지 입력 시작하기'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
-            The host will start the next step
+            대표자가 시작하기를 누르면 넘어갑니다
           </button>
         )
       }
     >
-      <div className="card pad-lg center">
-        <div className="tl-note">Room Code</div>
+      <div className="card" style={{ alignItems: 'center', gap: 14, padding: '24px 18px' }}>
+        <div className="hint" style={{ fontWeight: 600 }}>방 코드</div>
         <div className="roomcode">{room.code}</div>
         <button className="btn-ghost" style={{ width: '100%' }} onClick={copy}>
-          {copied ? 'Link Copied' : '🔗 Copy Invitation Link'}
+          🔗 초대 링크 복사
         </button>
+        {copied && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--good)' }}>링크를 복사했어요</div>
+        )}
       </div>
 
       <div className="card">
-        <div className="card-title">
-          Members: {room.members.length} / {room.headcount}
+        <div className="card-head">
+          <div className="card-title">참여자</div>
+          <div className="count">{room.members.length} / {room.headcount}명 입장</div>
         </div>
         <div className="chips">
           {room.members.map((m) => (
@@ -74,12 +80,12 @@ export default function RoomLobby({ room, isHost }) {
       </div>
       {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
-      <div className="card">
-        <div className="card-title">How It Works</div>
-        <p className="muted" style={{ margin: 0 }}>
-          Once everyone joins, each member ranks up to <strong>{k} places</strong>.
-          {' '}That limit is based on a {dayCount}-day trip for {room.headcount} travelers.
-          We combine the rankings, keep the highest-scoring places, and build a fastest route and a lowest-cost route.
+      <div className="card" style={{ gap: 10 }}>
+        <div className="card-title">이렇게 진행됩니다</div>
+        <p className="muted" style={{ lineHeight: 1.7 }}>
+          1. 각자 가고 싶은 곳을 담고 그중 {TOP_N}곳에 순위를 매깁니다.<br />
+          2. 1순위 3점, 2순위 2점, 3순위 1점으로 합산합니다.<br />
+          3. 점수가 높은 {SLOTS_PER_DAY * dayCount}곳만 남겨 두 가지 경로를 만들고, 투표로 하나를 확정합니다.
         </p>
       </div>
     </Screen>

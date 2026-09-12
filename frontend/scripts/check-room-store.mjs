@@ -13,10 +13,12 @@ class MemoryStorage {
 
 const browserListeners = new Map();
 const localStorage = new MemoryStorage();
+const sessionStorage = new MemoryStorage();
 globalThis.__SYNCTRIP_SYNC_MODE__ = 'mock';
 globalThis.__SYNCTRIP_API_MODE__ = 'mock';
 globalThis.window = {
   localStorage,
+  sessionStorage,
   addEventListener(type, listener) {
     const group = browserListeners.get(type) ?? new Set(); group.add(listener); browserListeners.set(type, group);
   },
@@ -110,6 +112,7 @@ function createMockSupabase() {
         if (args.p_reset_optimization) {
           target.optimizationState = 'idle'; target.optimizationOwner = null;
           target.optimizationRunId = null; target.optimizationStartedAt = null;
+          target.finalVotes = {};
         }
         return response(true);
       }
@@ -181,7 +184,6 @@ function createMockSupabase() {
 }
 
 // Exercise the production Supabase adapter through RPC and Realtime mocks.
-localStorage.removeItem('synctrip:member-id');
 const supabaseMock = createMockSupabase();
 const supabaseStore = new store.SupabaseRoomAdapter(supabaseMock.client);
 const room = await supabaseStore.create(meta);
@@ -195,7 +197,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(supabaseMock.channels().size, 1, 'one room channel is created');
 assert.equal([...supabaseMock.channels()][0].bindings.length, 7, 'all seven tables are room-scoped');
 
-localStorage.removeItem('synctrip:member-id');
+sessionStorage.removeItem(`synctrip:member-id:${room.code}`);
 const guestId = await supabaseStore.join(room.code, 'Guest');
 await supabaseStore.join(room.code, 'Renamed Guest');
 assert.equal((await supabaseStore.read(room.code)).members.filter((item) => item.id === guestId).length, 1, 'member join uses upsert semantics');
@@ -203,11 +205,13 @@ assert.equal((await supabaseStore.read(room.code)).members.find((item) => item.i
 
 await supabaseStore.addPlace(room.code, place);
 await supabaseStore.updatePlace(room.code, place.id, { isFixed: true });
+await supabaseStore.updatePlace(room.code, place.id, { visitWindow: { start: '13:00', end: '13:30' } });
+assert.deepEqual((await supabaseStore.read(room.code)).places[0].visitWindow, { start: '13:00', end: '13:30' });
 await supabaseStore.submitRanking(room.code, guestId, [place.id]);
 await supabaseStore.submitRanking(room.code, guestId, []);
 assert.deepEqual((await supabaseStore.read(room.code)).preferences[guestId], [], 'ranking replacement is atomic per member');
 
-localStorage.setItem('synctrip:member-id', hostId);
+sessionStorage.setItem(`synctrip:member-id:${room.code}`, hostId);
 await supabaseStore.patch(room.code, { status: 'collecting' });
 await supabaseStore.patch(room.code, { status: 'analyzing', optimizationState: 'idle' });
 const lockResults = await Promise.all([
@@ -227,6 +231,7 @@ await supabaseStore.castVote(room.code, guestId, 'min_cost');
 assert.deepEqual((await supabaseStore.read(room.code)).finalVotes, { [guestId]: 'min_cost' }, 'one member has one replacement vote');
 
 await supabaseStore.patch(room.code, { status: 'collecting', optimizationState: 'idle' });
+assert.deepEqual((await supabaseStore.read(room.code)).finalVotes, {}, 'retrying optimization clears prior votes');
 await supabaseStore.patch(room.code, { status: 'analyzing', optimizationState: 'idle' });
 const errorNonce = await supabaseStore.claimOptimization(room.code, hostId);
 await supabaseStore.finishOptimization(room.code, { status: 'error', code: 'NO_ROUTE', message: 'No route fits.', place_ids: ['p1'] }, errorNonce);
@@ -246,13 +251,16 @@ unsubscribe();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(supabaseMock.channels().size, 0, 'the Realtime channel is removed on cleanup');
 
-const body = buildOptimizeBody(await supabaseStore.read(room.code), [{ ...place, score: 7 }]);
+const storedPlace = (await supabaseStore.read(room.code)).places[0];
+const body = buildOptimizeBody(await supabaseStore.read(room.code), [{ ...storedPlace, score: 7 }]);
 assert.equal(body.settings.transport_mode, 'transit');
 assert.equal(body.places[0].preference_score, 7);
+assert.deepEqual(body.places[0].hard_constraint, { start: '13:00', end: '13:30' });
 
 // Static migration checks keep critical SQL invariants visible without a production project.
 const migrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912000000_sync_trip_initial_schema.sql', import.meta.url));
-const sql = readFileSync(migrationPath, 'utf8');
+const visitMigrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912010000_add_scheduled_visit_windows.sql', import.meta.url));
+const sql = `${readFileSync(migrationPath, 'utf8')}\n${readFileSync(visitMigrationPath, 'utf8')}`;
 for (const table of ['rooms', 'room_members', 'room_places', 'room_preferences', 'room_routes', 'room_errors', 'room_final_votes']) {
   assert.match(sql, new RegExp(`create table public\\.${table}`));
   assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
@@ -266,6 +274,8 @@ assert.match(sql, /optimization_nonce = p_nonce/);
 assert.match(sql, /count\(distinct item\.value\)/, 'rankings reject duplicate place IDs');
 assert.match(sql, /configured number of members/, 'room capacity is enforced transactionally');
 assert.match(sql, /delete from public\.room_final_votes where room_id = v_room\.id/, 'retrying optimization clears prior votes');
+assert.match(sql, /'visitWindow', p\.hard_constraint/, 'snapshots expose scheduled visit windows');
+assert.match(sql, /key not in \([^)]*'visitWindow'/, 'place patches accept scheduled visit windows');
 assert.equal(
   (sql.match(/security definer/g) ?? []).length,
   (sql.match(/security definer\s+set search_path = ''/g) ?? []).length,

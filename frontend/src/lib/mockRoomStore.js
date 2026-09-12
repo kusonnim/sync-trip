@@ -1,6 +1,6 @@
 import {
-  getHostToken, getMemberId, makeRoomCode, normalizeRoomCode,
-  randomHex, rememberHost, storage,
+  ensureMemberId, getHostToken, makeMemberId, makeRoomCode, normalizeRoomCode,
+  randomHex, rememberHost, setMemberId, storage,
 } from './roomIdentity.js';
 
 const ROOM_PREFIX = 'synctrip:mock-room:';
@@ -39,9 +39,9 @@ export class MockRoomAdapter {
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const code = makeRoomCode();
       if (this.load(code)) continue;
-      const id = getMemberId(); const token = randomHex(24);
+      const id = makeMemberId(); const token = randomHex(24);
       const room = publicRoom(code, { ...roomRecord(meta, code, id, token), createdAt: Date.now(), members: [{ id, nickname: meta.hostNickname, isHost: true, submitted: false }] });
-      rememberHost(code, token); this.save(code, room); return room;
+      rememberHost(code, token); setMemberId(code, id); this.save(code, room); return room;
     }
     throw new Error('Could not allocate a room code. Please try again.');
   }
@@ -54,7 +54,7 @@ export class MockRoomAdapter {
   }
   async join(code, nickname) {
     const room = this.load(code); if (!room) throw new Error('Room not found.');
-    const id = getMemberId(); const existing = room.members.find((item) => item.id === id);
+    const id = ensureMemberId(code); const existing = room.members.find((item) => item.id === id);
     room.members = existing ? room.members.map((item) => item.id === id ? { ...item, nickname } : item) : [...room.members, { id, nickname, isHost: false, submitted: false }];
     this.save(code, room); return id;
   }
@@ -87,5 +87,23 @@ export class MockRoomAdapter {
 }
 
 export function resetMockRooms() {
-  Object.keys(storage()).filter((key) => key.startsWith(ROOM_PREFIX)).forEach((key) => storage().removeItem(key));
+  const target = storage();
+  const keys = Array.from({ length: target.length }, (_, index) => target.key(index))
+    .filter((key) => key?.startsWith(ROOM_PREFIX));
+  keys.forEach((key) => target.removeItem(key));
+}
+
+export function saveSeededMockRoom(room) {
+  const token = randomHex(24);
+  const stored = publicRoom(room.code, {
+    ...room,
+    hostToken: token,
+    optimizationState: 'idle',
+    optimizationOwner: null,
+    optimizationRunId: null,
+  });
+  rememberHost(room.code, token);
+  setMemberId(room.code, room.hostId);
+  new MockRoomAdapter().save(room.code, stored);
+  return stored;
 }

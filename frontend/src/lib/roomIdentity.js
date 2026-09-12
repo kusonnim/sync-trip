@@ -1,10 +1,15 @@
-const MEMBER_KEY = 'synctrip:member-id';
+const MEMBER_PREFIX = 'synctrip:member-id:';
 const HOST_PREFIX = 'synctrip:host-token:';
 export const ROOM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 export function storage() {
   if (typeof window === 'undefined') throw new Error('Room storage requires a browser.');
   return window.localStorage;
+}
+
+function identityStorage() {
+  if (typeof window === 'undefined') throw new Error('Room identity requires a browser.');
+  return window.sessionStorage;
 }
 
 export function normalizeRoomCode(code) {
@@ -23,17 +28,26 @@ export function makeRoomCode() {
   return Array.from(values, (value) => ROOM_ALPHABET[value % ROOM_ALPHABET.length]).join('');
 }
 
-export function getMemberId() {
-  let id = storage().getItem(MEMBER_KEY);
+export function makeMemberId() {
+  return `m-${randomHex(12)}`;
+}
+
+export function getMemberId(code) {
+  if (!code) return null;
+  return identityStorage().getItem(MEMBER_PREFIX + normalizeRoomCode(code));
+}
+
+export function ensureMemberId(code) {
+  let id = getMemberId(code);
   if (!id) {
-    id = `m-${randomHex(12)}`;
-    storage().setItem(MEMBER_KEY, id);
+    id = makeMemberId();
+    setMemberId(code, id);
   }
   return id;
 }
 
-export function setMemberId(id) {
-  if (id) storage().setItem(MEMBER_KEY, id);
+export function setMemberId(code, id) {
+  if (code && id) identityStorage().setItem(MEMBER_PREFIX + normalizeRoomCode(code), id);
 }
 
 export function getHostToken(code) {
@@ -45,7 +59,12 @@ export function rememberHost(code, token) {
 }
 
 export function resetIdentity() {
-  Object.keys(storage())
-    .filter((key) => key.startsWith(HOST_PREFIX) || key === MEMBER_KEY)
-    .forEach((key) => storage().removeItem(key));
+  const shared = storage();
+  const hostKeys = Array.from({ length: shared.length }, (_, index) => shared.key(index))
+    .filter((key) => key?.startsWith(HOST_PREFIX));
+  hostKeys.forEach((key) => shared.removeItem(key));
+  const scoped = identityStorage();
+  const memberKeys = Array.from({ length: scoped.length }, (_, index) => scoped.key(index))
+    .filter((key) => key?.startsWith(MEMBER_PREFIX));
+  memberKeys.forEach((key) => scoped.removeItem(key));
 }

@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import Screen from '../components/Screen';
 import { optimize, buildOptimizeBody } from '../lib/api';
 import { claimOptimization, finishOptimization, readRoom } from '../lib/roomStore';
-import { picksPerPerson, scorePlaces, pickCandidates } from '../lib/preference';
+import { scorePlaces, pickCandidates } from '../lib/preference';
 import { daysBetween } from '../lib/time';
 
-const STEPS = ['Calculating preference scores', 'Selecting candidate places', 'Analyzing travel time and cost', 'Building two optimized routes'];
+const STEPS = ['선호 점수 계산', '방문 후보 정리', '이동시간·비용 분석', '최적 경로 2안 생성'];
 
 export default function Analyzing({ room, me, isHost }) {
   const [done, setDone] = useState(0);
@@ -14,7 +14,8 @@ export default function Analyzing({ room, me, isHost }) {
   const snapshot = useRef(room);
 
   useEffect(() => {
-    // Run optimization once on the host screen, then write the result to the room for everyone.
+    // Run the calculation once on the host's screen and write the result to the room,
+    // which propagates it to everyone.
     if (!isHost || started.current) return;
     started.current = true;
 
@@ -27,18 +28,19 @@ export default function Analyzing({ room, me, isHost }) {
       try {
         runId = await claimOptimization(currentRoom.code, me.id);
         if (!runId) {
-          setError('Optimization is already running in another host tab. This room will advance when it finishes.');
+          clearInterval(ticker);
+          setError('다른 대표자 탭에서 이미 계산 중입니다. 계산이 끝나면 이 방도 자동으로 넘어갑니다.');
           return;
         }
         optimizationRoom = await readRoom(currentRoom.code);
         if (!optimizationRoom) throw new Error('Room not found.');
       } catch {
-        setError('Could not acquire the optimization lock or refresh the room snapshot. Refresh to retry if the host disconnected.');
+        clearInterval(ticker);
+        setError('계산 잠금을 얻거나 최신 방 정보를 불러오지 못했습니다. 잠시 후 새로고침해 주세요.');
         return;
       }
       const dayCount = daysBetween(optimizationRoom.startDate, optimizationRoom.endDate);
-      const k = picksPerPerson(dayCount, optimizationRoom.headcount);
-      const scored = scorePlaces(optimizationRoom.places, optimizationRoom.preferences, k);
+      const scored = scorePlaces(optimizationRoom.places, optimizationRoom.preferences);
       const candidates = pickCandidates(scored, dayCount);
 
       let result;
@@ -52,36 +54,38 @@ export default function Analyzing({ room, me, isHost }) {
       setDone(STEPS.length);
 
       try { await finishOptimization(currentRoom.code, result, runId); }
-      catch { setError('Optimization finished, but the shared result could not be saved. Refresh to retry after the lock expires.'); }
+      catch { setError('계산은 끝났지만 결과를 저장하지 못했습니다. 잠금이 만료된 뒤 새로고침해 다시 시도해 주세요.'); }
     })();
 
     return () => clearInterval(ticker);
   }, [isHost, me.id]);
 
+  const dayCount = daysBetween(room.startDate, room.endDate);
+
   return (
-    <Screen step={6} title="Optimizing Your Trip" subtitle="Please wait a moment">
-      <div className="card pad-lg">
+    <Screen title="의견을 취합하고 있어요" subtitle="잠시만 기다려 주세요">
+      <div className="card" style={{ gap: 14 }}>
         {STEPS.map((label, i) => (
           <div className={i < done ? 'progress-step done' : 'progress-step'} key={label}>
-            <span className="tick">✓</span>
-            {label}
+            <span className="tick">{i < done ? '✓' : i + 1}</span>
+            <span className="label">{label}</span>
           </div>
         ))}
       </div>
 
       <div className="card">
-        <div className="card-title">Optimization Settings</div>
+        <div className="card-title">이번 계산에 쓰인 조건</div>
         <div className="chips">
-          <span className="chip gray">{daysBetween(room.startDate, room.endDate)} days</span>
-          <span className="chip gray">{room.members.filter((m) => m.submitted).length} submitted</span>
-          <span className="chip gray">{room.places.length} candidates</span>
-          <span className="chip">{room.transportMode === 'transit' ? 'Public Transit' : 'Car'}</span>
-          <span className="chip accent">{room.dailyEnd} deadline</span>
+          <span className="chip">{dayCount}일</span>
+          <span className="chip">{room.members.filter((m) => m.submitted).length}명</span>
+          <span className="chip">{room.transportMode === 'transit' ? '🚌 대중교통' : '🚗 자차'}</span>
+          <span className="chip">{room.dailyStart} 시작</span>
+          <span className="chip accent">{room.dailyEnd} 귀가 마감</span>
         </div>
       </div>
       {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
-      {!isHost && <p className="muted center">This screen will advance when optimization finishes on the host's device.</p>}
+      {!isHost && <p className="muted center">대표자 화면에서 계산이 끝나면 자동으로 넘어갑니다.</p>}
     </Screen>
   );
 }

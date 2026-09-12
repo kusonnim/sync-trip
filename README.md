@@ -18,6 +18,8 @@ Browser (React + Vite)
 
 Rooms progress through `setup → collecting → analyzing → voting → confirmed`. Relational tables persist members, places, rankings, routes, errors, and one vote per member. The host acquires an atomic PostgreSQL optimization lock, calls FastAPI with one coherent room snapshot, and completes the run through a nonce-protected RPC.
 
+The Korean mobile UI separates unlimited place suggestions from each member's top-three ranking. Hosts can edit business hours, required stops, stay duration, and scheduled visit windows before the group compares and votes on the generated routes.
+
 ## Supabase Setup
 
 1. Create a Supabase project and copy its project URL and publishable key from the Connect dialog.

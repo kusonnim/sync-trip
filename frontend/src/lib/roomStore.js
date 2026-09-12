@@ -12,8 +12,8 @@ function getAdapter() {
 }
 
 export { makeRoomCode, normalizeRoomCode, MockRoomAdapter, SupabaseRoomAdapter };
-export const getMyId = () => getMemberId();
-export const setMyId = (_code, id) => setMemberId(id);
+export const getMyId = (code) => getMemberId(code);
+export const setMyId = (code, id) => setMemberId(code, id);
 export const readRoom = async (code) => getAdapter().read(normalizeRoomCode(code));
 export function subscribe(code, callback, onError) {
   try { return getAdapter().subscribe(normalizeRoomCode(code), callback, onError); }

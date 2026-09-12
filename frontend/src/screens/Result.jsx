@@ -16,6 +16,7 @@ export default function Result({ room, me, isHost }) {
   const votes = room.routes.map((r) => Object.values(room.finalVotes).filter((v) => v === r.type).length);
   const leaderIndex = votes.length ? votes.indexOf(Math.max(...votes)) : -1;
   const winner = room.routes.find((r) => r.type === room.confirmedRouteId) ?? room.routes[leaderIndex];
+  const castCount = Object.keys(room.finalVotes).length;
 
   async function share() {
     try {
@@ -30,89 +31,97 @@ export default function Result({ room, me, isHost }) {
   async function vote(type) {
     setSaving(true); setSyncError('');
     try { await castVote(room.code, me.id, type); }
-    catch { setSyncError('Your vote could not be synchronized. Please try again.'); }
+    catch { setSyncError('투표를 동기화하지 못했습니다. 다시 시도해 주세요.'); }
     finally { setSaving(false); }
   }
 
   async function confirm() {
     setSaving(true); setSyncError('');
     try { await patchRoom(room.code, { status: 'confirmed', confirmedRouteId: room.routes[leaderIndex].type }); }
-    catch { setSyncError('The final itinerary could not be confirmed. Please try again.'); setSaving(false); }
+    catch { setSyncError('최종 일정을 확정하지 못했습니다. 다시 시도해 주세요.'); setSaving(false); }
   }
 
-  // On failure, identify the conflict and return users to the editing screen.
+  async function returnToEditing() {
+    setSaving(true); setSyncError('');
+    try { await patchRoom(room.code, { status: 'collecting', optimizationState: 'idle' }); }
+    catch { setSyncError('수정 화면으로 돌아가지 못했습니다. 다시 시도해 주세요.'); setSaving(false); }
+  }
+
+  // The calculation failed. Name the conflict and send the user back to the edit screen.
   if (room.error) {
     return (
-      <Screen step={7} title="We Couldn't Build an Itinerary" subtitle="Adjust the times and try again">
-        <ConflictNotice error={room.error} places={room.places} />
-        {syncError && <p className="tl-note" style={{ color: 'var(--accent)' }}>{syncError}</p>}
-        <div className="bottom-bar">
+      <Screen
+        title="일정을 만들지 못했어요"
+        subtitle="시간을 조정하면 다시 계산합니다"
+        footer={
           <button
             className="btn-primary"
-            onClick={() => patchRoom(room.code, { status: 'collecting', optimizationState: 'idle' }).catch(() => setSyncError('Could not return to editing. Please try again.'))}
+            disabled={saving}
+            onClick={returnToEditing}
           >
-            Edit Places and Times
+            {saving ? '돌아가는 중...' : '장소와 시간 고치러 가기'}
           </button>
-        </div>
-      </Screen>
-    );
-  }
-
-  if (confirmed && winner) {
-    return (
-      <Screen step={10} title="Your Itinerary Is Confirmed" subtitle={room.title}>
-        <div className="notice" style={{ background: '#eaf7f0', color: '#1d7048' }}>
-          <strong>{winner.label} selected.</strong>
-          <div style={{ marginTop: 4 }}>
-            Total travel time: {durationText(winner.total_time)} · Estimated fare: {won(winner.total_cost)}
-          </div>
-        </div>
-        <RouteCard route={winner} open onToggle={() => {}} />
-        <div className="bottom-bar">
-          <button className="btn-primary" onClick={share}>
-            {copied ? 'Link Copied' : 'Share Itinerary Link'}
-          </button>
-        </div>
+        }
+      >
+        <ConflictNotice error={room.error} places={room.places} />
+        {syncError && <p className="hint" style={{ color: 'var(--accent)' }}>{syncError}</p>}
       </Screen>
     );
   }
 
   return (
     <Screen
-      step={9}
-      title="Which Itinerary Should We Choose?"
-      subtitle={`${Object.keys(room.finalVotes).length} / ${room.members.length} members voted`}
+      title={confirmed ? '이 일정으로 확정했어요' : '어느 일정으로 갈까요'}
+      subtitle={`${castCount} / ${room.members.length}명 투표`}
       footer={
-        isHost ? (
+        confirmed ? (
+          <button className="btn-good" onClick={share}>
+            {copied ? '링크를 복사했어요' : '일정 링크 공유하기'}
+          </button>
+        ) : isHost ? (
           <button
-            className="btn-accent"
-            disabled={Object.keys(room.finalVotes).length === 0 || saving}
+            className="btn-primary"
+            disabled={castCount === 0 || saving}
             onClick={confirm}
           >
-            {saving ? 'Saving...' : 'Confirm the Most Popular Route'}
+            {saving ? '확정하는 중...' : '최다 득표안으로 확정하기'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
-            The itinerary will appear when the host confirms it
+            대표자가 확정하면 일정이 나옵니다
           </button>
         )
       }
     >
-      <p className="muted">
-        We built two routes with different goals from the same candidates. Both respect business hours and reservations.
-      </p>
-      {syncError && <p className="tl-note" style={{ color: 'var(--accent)' }}>{syncError}</p>}
-      {room.routes.map((route, i) => (
+      {confirmed && winner && (
+        <div className="notice good">
+          <span>{winner.label} 안으로 확정했어요</span>
+          <span className="sub">
+            이동 {durationText(winner.total_time)} · 요금 {won(winner.total_cost)}
+          </span>
+        </div>
+      )}
+
+      {!confirmed && (
+        <p className="muted">
+          {room.routes.length > 1
+            ? '같은 후보로 목적이 다른 두 안을 만들었어요. 둘 다 영업시간과 지정한 방문 시각을 지킵니다.'
+            : '시간 제약이 빡빡해 가능한 일정이 하나뿐이에요. 이 안은 영업시간과 지정한 방문 시각을 모두 지킵니다.'}
+        </p>
+      )}
+
+      {(confirmed && winner ? [winner] : room.routes).map((route) => (
         <RouteCard
           key={route.type}
           route={route}
-          open={open === route.type}
+          open={confirmed ? true : open === route.type}
           onToggle={() => setOpen(open === route.type ? null : route.type)}
-          votes={votes[i]}
+          votes={confirmed ? undefined : votes[room.routes.indexOf(route)]}
           myVote={myVote}
-          onVote={saving ? undefined : vote}
+          onVote={confirmed || saving ? undefined : vote}
         />
       ))}
+      {syncError && <p className="hint" style={{ color: 'var(--accent)' }}>{syncError}</p>}
     </Screen>
   );
 }

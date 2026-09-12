@@ -1,6 +1,7 @@
 import { getSupabase } from './supabase.js';
 import {
-  getHostToken, getMemberId, makeRoomCode, normalizeRoomCode, randomHex, rememberHost,
+  ensureMemberId, getHostToken, getMemberId, makeMemberId, makeRoomCode, normalizeRoomCode,
+  randomHex, rememberHost, setMemberId,
 } from './roomIdentity.js';
 
 const REALTIME_TABLES = [
@@ -24,7 +25,7 @@ export class SupabaseRoomAdapter {
   }
 
   async create(meta) {
-    const hostId = getMemberId();
+    const hostId = makeMemberId();
     const token = randomHex(24);
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const code = makeRoomCode();
@@ -38,6 +39,7 @@ export class SupabaseRoomAdapter {
           p_origin: meta.origin, p_destination: meta.destination,
         }, 'The room could not be created. Check the connection and try again.');
         rememberHost(code, token);
+        setMemberId(code, hostId);
         return room;
       } catch (error) {
         if (error.code !== '23505') throw error;
@@ -103,7 +105,7 @@ export class SupabaseRoomAdapter {
   }
 
   async join(code, nickname) {
-    const id = getMemberId();
+    const id = ensureMemberId(code);
     const joined = await this.call('join_room', {
       p_room_code: normalizeRoomCode(code), p_member_id: id, p_nickname: nickname,
     }, 'Could not join this room.');
@@ -129,7 +131,7 @@ export class SupabaseRoomAdapter {
       p_stay_time_max: place.maxStay, p_open_time: place.openTime ?? null,
       p_close_time: place.closeTime ?? null, p_fixed_time: place.fixedTime ?? null,
       p_best_time: place.bestTime ?? null, p_required: place.isFixed ?? false,
-      p_kakao_id: place.kakaoId ?? null, p_added_by: place.addedBy ?? getMemberId(),
+      p_kakao_id: place.kakaoId ?? null, p_added_by: place.addedBy ?? getMemberId(code),
       p_hours_source: place.hoursSource ?? null,
     }, 'Could not add that place.');
     if (!stored) throw new Error('Room not found.');
@@ -174,7 +176,7 @@ export class SupabaseRoomAdapter {
 
   async finishOptimization(code, result, nonce) {
     const common = {
-      p_room_code: normalizeRoomCode(code), p_member_id: getMemberId(),
+      p_room_code: normalizeRoomCode(code), p_member_id: getMemberId(code),
       p_host_token: getHostToken(code) ?? '', p_nonce: nonce,
     };
     if (result.status === 'success') {
