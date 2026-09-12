@@ -24,7 +24,7 @@ class HealthResponse(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or get_settings()
-    application = FastAPI(title=config.app_name, version="0.3.0")
+    application = FastAPI(title=config.app_name, version="0.4.0")
     application.state.routing_service = build_routing_service(config)
     application.add_middleware(
         CORSMiddleware,

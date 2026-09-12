@@ -6,6 +6,8 @@ import { daysBetween } from '../lib/time';
 
 export default function RoomLobby({ room, isHost }) {
   const [copied, setCopied] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState('');
   const link = `${window.location.origin}/r/${room.code}`;
   const dayCount = daysBetween(room.startDate, room.endDate);
   const k = picksPerPerson(dayCount, room.headcount);
@@ -20,6 +22,17 @@ export default function RoomLobby({ room, isHost }) {
     }
   }
 
+  async function start() {
+    setStarting(true);
+    setError('');
+    try {
+      await patchRoom(room.code, { status: 'collecting' });
+    } catch {
+      setError('Could not advance the room. Check your connection and try again.');
+      setStarting(false);
+    }
+  }
+
   return (
     <Screen
       step={3}
@@ -29,10 +42,10 @@ export default function RoomLobby({ room, isHost }) {
         isHost ? (
           <button
             className="btn-primary"
-            disabled={room.members.length < 2}
-            onClick={() => patchRoom(room.code, { status: 'collecting' })}
+            disabled={room.members.length < 2 || starting}
+            onClick={start}
           >
-            {room.members.length < 2 ? 'Waiting for One More Member' : 'Start Adding Place Preferences'}
+            {starting ? 'Starting...' : room.members.length < 2 ? 'Waiting for One More Member' : 'Start Adding Place Preferences'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
@@ -59,6 +72,7 @@ export default function RoomLobby({ room, isHost }) {
           ))}
         </div>
       </div>
+      {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
       <div className="card">
         <div className="card-title">How It Works</div>

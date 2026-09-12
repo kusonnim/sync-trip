@@ -31,11 +31,11 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the frontend runs the whole flow on its own, and the Phase 3 backend provides the
-FastAPI application, health check, Kakao Local search proxy, Google Places business-hours lookup,
-Track 1 optimization, and Track 2 live refinement through Kakao Mobility or ODsay. Setting
-`VITE_API_BASE` routes all three frontend API calls to the backend; `src/lib/mockOptimize.js`
-remains an offline development fallback.
+**Build status:** the final MVP connects the React/Vite frontend to Firestore room synchronization
+and the FastAPI backend. Production uses explicit `firestore` and `backend` modes; an explicit
+`mock` mode remains available for local demos. The backend provides the health check, Kakao Local
+search, Google Places business hours, Track 1 optimization, and bounded Track 2 refinement through
+Kakao Mobility or ODsay.
 
 ```text
 📦 SyncTrip
@@ -48,14 +48,14 @@ remains an offline development fallback.
  ┃ ┃ ┣ 📂 components/        # Timeline, RouteCard, ConflictNotice
  ┃ ┃ ┗ 📂 lib/
  ┃ ┃   ┣ 📜 api.js           # Backend communication (fetch)
- ┃ ┃   ┣ 📜 roomStore.js     # Room state + realtime sync (localStorage now, Firestore later)
+ ┃ ┃   ┣ 📜 roomStore.js     # Firestore room state, listeners, votes, and optimization lock
  ┃ ┃   ┣ 📜 preference.js    # Borda scoring and candidate selection
- ┃ ┃   ┗ 📜 mockOptimize.js  # Stand-in optimizer until the backend is ready
+ ┃ ┃   ┗ 📜 mockOptimize.js  # Explicit local/demo optimizer fallback
  ┃ ┣ 📂 scripts/
  ┃ ┃ ┗ 📜 check-optimizer.mjs # Constraint checks, run with `npm run check`
  ┃ ┗ 📜 package.json
  ┃
- ┗ 📂 backend/ (Python FastAPI) — Phase 3 place APIs and two-track optimizer
+ ┗ 📂 backend/ (Python FastAPI) — production-configurable place APIs and two-track optimizer
    ┣ 📂 app/
    ┃ ┣ 📜 main.py          # FastAPI application and CORS setup
    ┃ ┣ 📂 api/             # Search, business-hours, and optimization routes

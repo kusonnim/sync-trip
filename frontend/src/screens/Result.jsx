@@ -8,6 +8,8 @@ import { durationText, won } from '../lib/time';
 export default function Result({ room, me, isHost }) {
   const [open, setOpen] = useState(room.routes[0]?.type ?? null);
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncError, setSyncError] = useState('');
 
   const confirmed = room.status === 'confirmed';
   const myVote = room.finalVotes[me.id];
@@ -25,15 +27,29 @@ export default function Result({ room, me, isHost }) {
     }
   }
 
+  async function vote(type) {
+    setSaving(true); setSyncError('');
+    try { await castVote(room.code, me.id, type); }
+    catch { setSyncError('Your vote could not be synchronized. Please try again.'); }
+    finally { setSaving(false); }
+  }
+
+  async function confirm() {
+    setSaving(true); setSyncError('');
+    try { await patchRoom(room.code, { status: 'confirmed', confirmedRouteId: room.routes[leaderIndex].type }); }
+    catch { setSyncError('The final itinerary could not be confirmed. Please try again.'); setSaving(false); }
+  }
+
   // On failure, identify the conflict and return users to the editing screen.
   if (room.error) {
     return (
       <Screen step={7} title="We Couldn't Build an Itinerary" subtitle="Adjust the times and try again">
         <ConflictNotice error={room.error} places={room.places} />
+        {syncError && <p className="tl-note" style={{ color: 'var(--accent)' }}>{syncError}</p>}
         <div className="bottom-bar">
           <button
             className="btn-primary"
-            onClick={() => patchRoom(room.code, { status: 'collecting', error: null })}
+            onClick={() => patchRoom(room.code, { status: 'collecting', optimizationState: 'idle' }).catch(() => setSyncError('Could not return to editing. Please try again.'))}
           >
             Edit Places and Times
           </button>
@@ -70,15 +86,10 @@ export default function Result({ room, me, isHost }) {
         isHost ? (
           <button
             className="btn-accent"
-            disabled={Object.keys(room.finalVotes).length === 0}
-            onClick={() =>
-              patchRoom(room.code, {
-                status: 'confirmed',
-                confirmedRouteId: room.routes[leaderIndex].type,
-              })
-            }
+            disabled={Object.keys(room.finalVotes).length === 0 || saving}
+            onClick={confirm}
           >
-            Confirm the Most Popular Route
+            {saving ? 'Saving...' : 'Confirm the Most Popular Route'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
@@ -90,6 +101,7 @@ export default function Result({ room, me, isHost }) {
       <p className="muted">
         We built two routes with different goals from the same candidates. Both respect business hours and reservations.
       </p>
+      {syncError && <p className="tl-note" style={{ color: 'var(--accent)' }}>{syncError}</p>}
       {room.routes.map((route, i) => (
         <RouteCard
           key={route.type}
@@ -98,7 +110,7 @@ export default function Result({ room, me, isHost }) {
           onToggle={() => setOpen(open === route.type ? null : route.type)}
           votes={votes[i]}
           myVote={myVote}
-          onVote={(type) => castVote(room.code, me.id, type)}
+          onVote={saving ? undefined : vote}
         />
       ))}
     </Screen>

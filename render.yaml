@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: synctrip-api
+    runtime: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        sync: false
+      - key: KAKAO_REST_API_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: ODSAY_API_KEY
+        sync: false

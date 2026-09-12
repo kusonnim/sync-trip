@@ -4,7 +4,7 @@
 
 This product definition combines three source materials: the original planning document, handwritten notes, and the user-flow diagram. [PROJECT.md](../PROJECT.md) is the canonical source for API contracts and algorithm behavior; if this document differs, follow PROJECT.md.
 
-The frontend supports the complete ten-step flow. The Phase 3 backend provides Kakao place search, Google business-hours lookup, Track 1 local optimization, and Track 2 live routing refinement. The frontend mock remains an offline development fallback.
+The final MVP supports the complete ten-step flow with Firestore synchronization across browsers, a production-configurable FastAPI backend, Track 1 local optimization, and bounded Track 2 live routing refinement. Explicit mock modes remain available for local development.
 
 **Problem:** Place links pile up in group chats without producing a finalized plan. Existing travel apps usually sort by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM.
 
@@ -54,7 +54,7 @@ Required places are always included. Fill the remaining `S - requiredCount` slot
 
 ## 2. Data Model
 
-The following is the target Firestore structure. `frontend/src/lib/roomStore.js` currently stores each room as one localStorage object, with arrays and objects standing in for subcollections. Migrating to Firestore should require changes only to that file's function bodies, not the screen components.
+The implemented Firestore structure uses a room document and independently writable subcollections. Firestore paths must alternate collections and documents, so routes and errors use a singleton `current` document.
 
 ```text
 rooms/{roomCode}                      // Four uppercase letters or digits
@@ -81,10 +81,10 @@ rooms/{roomCode}/places/{placeId}
 rooms/{roomCode}/preferences/{memberId}
   ranking: [placeId, ...]             // Ordered from first choice
 
-rooms/{roomCode}/routes                // Store the /api/optimize routes array as-is
+rooms/{roomCode}/routes/current        // Store the /api/optimize routes array as-is
   [{ type, label, total_time, total_cost, days: [{ date, timeline: [...] }] }]
 
-rooms/{roomCode}/error                 // Present only when optimization fails
+rooms/{roomCode}/errors/current        // Present only when optimization fails
   { code, message, placeIds }
 
 rooms/{roomCode}/finalVotes/{memberId}
@@ -208,24 +208,19 @@ Category defaults when Google data is unavailable:
 
 ---
 
-## 6. Remaining Work and Order
+## 6. Final MVP Integration
 
-The frontend portion of the nine-hour build is complete. Remaining work is split into parallel tracks, ordered by priority:
+Production uses `VITE_SYNC_MODE=firestore`, `VITE_API_MODE=backend`, `VITE_API_BASE`, and the Firebase web variables. Local/demo operation must explicitly select `mock`; it is never an implicit production fallback. Firestore persists independently writable member, place, preference, route, error, and vote documents and realtime listeners synchronize every screen transition.
 
-| Priority | Work | Owner | Notes |
-|---:|---|---|---|
-| 1 | Connect deployed frontend and backend through `VITE_API_BASE` and provider credentials | Shared | Backend contract is ready |
-| 2 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
-| 3 | Map markers and routes | Frontend | Above the cut line if time remains |
-| 4 | Result-image export | Frontend | First feature to drop |
+Only the host UI transitions into `analyzing`. It then claims a Firestore transaction lock using `optimizationState`, `optimizationOwner`, `optimizationStartedAt`, and a random run nonce. The client-side host token prevents accidental actions but is not secure authentication. A two-minute stale threshold allows a refreshed host to recover an abandoned run, while nonce validation prevents the abandoned request from later overwriting the recovered result. Success and error artifacts persist before the room enters `voting`.
 
-Firestore appears lower in this list, but it is required for a multi-device demo. A two-tab demo on one machine works with the current implementation, so choose the demo format before reprioritizing.
+The accountless security rules validate room codes, field sets, types, sizes, immutable ownership fields, and allowed document paths. Without Firebase Authentication or trusted backend writes, they cannot securely distinguish a host or member. Anyone with a room code is inside the MVP trust boundary; sensitive deployment requires authentication.
 
 ### Completed
 
 - All ten interface steps: room creation, invitation code, nickname entry, place search and ranking, optimization, two-route comparison, voting, and confirmation
 - Shared room-status subscription architecture
-- Constraint-aware temporary frontend optimizer with 14 passing checks
+- Constraint-aware mock frontend optimizer with 14 passing checks
 - Preference scoring and candidate selection
 - Conflict diagnosis and its UI
 - FastAPI application with safe CORS, environment validation, and a health endpoint
@@ -234,18 +229,21 @@ Firestore appears lower in this list, but it is required for a multi-device demo
 - Phase 2 Track 1 backend optimizer and `POST /api/optimize`
 - Deterministic day assignment, exhaustive permutation search, constraint simulation, and conflict diagnosis
 - Phase 3 cached Kakao Mobility and ODsay adapters with bounded precise-candidate refinement
+- Firestore realtime synchronization with document-level concurrent writes
+- Transaction-guarded single-owner optimization and persisted routes/errors
+- Per-member vote replacement and persisted confirmed route
+- Mocked room-store integration and frontend/backend contract checks
 
 ### Cut Line
 
-**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. The frontend and Phase 3 backend now meet this line; the temporary frontend engine remains available for an offline demo.
+**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. The integrated frontend and backend meet this line; the mock frontend engine remains available only for an explicit local demo.
 
 **Drop in this order if delayed:**
 
 1. Result-image export
 2. Map routes
 3. Google Places hours; use category defaults and manual entry
-4. Firestore; demonstrate with localStorage in one browser
-5. Live provider routing; show explicitly marked Track 1 estimates instead
+4. Live provider routing; show explicitly marked Track 1 estimates instead
 
 Dropping Track 2 removes the public-transit accuracy claim, so remove maps and image export first.
 

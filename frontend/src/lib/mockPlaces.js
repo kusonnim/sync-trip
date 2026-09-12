@@ -2,6 +2,7 @@
 // It is no longer used when USE_MOCK in api.js becomes false.
 
 export const MOCK_PLACES = [
+  { id: 'p-seoul-station', name: 'Seoul Station', category: 'attraction', lat: 37.5547, lng: 126.9707, address: '405 Hangang-daero, Yongsan-gu, Seoul' },
   { id: 'p-seongsu-cafe', name: 'Daelim Warehouse Seongsu', category: 'cafe', lat: 37.5445, lng: 127.0557, address: '78 Seongsui-ro, Seongdong-gu, Seoul' },
   { id: 'p-seoul-forest', name: 'Seoul Forest', category: 'attraction', lat: 37.5443, lng: 127.0374, address: '273 Ttukseom-ro, Seongdong-gu, Seoul' },
   { id: 'p-namsan', name: 'N Seoul Tower', category: 'attraction', lat: 37.5512, lng: 126.9882, address: '105 Namsangongwon-gil, Yongsan-gu, Seoul' },

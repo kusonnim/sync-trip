@@ -13,14 +13,24 @@ import { subscribe, getMyId, setMyId } from '../lib/roomStore';
 export default function Room() {
   const { code } = useParams();
   const [room, setRoom] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const [myId, setMyIdState] = useState(() => getMyId(code));
 
-  useEffect(() => subscribe(code, setRoom), [code]);
+  useEffect(() => subscribe(code, (next) => { setRoom(next); setLoaded(true); setSyncError(''); }, () => { setLoaded(true); setSyncError('Room synchronization is unavailable. Check your connection.'); }), [code]);
+
+  if (!loaded) {
+    return <Screen title="Loading Room"><p className="muted">Connecting to the shared room...</p></Screen>;
+  }
+
+  if (syncError) {
+    return <Screen title="Connection Problem"><p className="muted">{syncError}</p></Screen>;
+  }
 
   if (!room) {
     return (
       <Screen title="Room Not Found">
-        <p className="muted">Check the code. Only rooms created in this browser are available.</p>
+        <p className="muted">Check the room code and invitation link, then try again.</p>
       </Screen>
     );
   }

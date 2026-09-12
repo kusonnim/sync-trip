@@ -12,6 +12,9 @@ export default function PlacePicker({ room, me, isHost }) {
   const [searching, setSearching] = useState(false);
   const [ranking, setRanking] = useState(room.preferences[me.id] ?? []);
   const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [hoursWarning, setHoursWarning] = useState('');
 
   const k = picksPerPerson(daysBetween(room.startDate, room.endDate), room.headcount);
   const submittedCount = room.members.filter((m) => m.submitted).length;
@@ -21,23 +24,52 @@ export default function PlacePicker({ room, me, isHost }) {
     let alive = true;
     setSearching(true);
     const timer = setTimeout(async () => {
-      const found = await searchPlaces(query);
-      if (alive) { setResults(found); setSearching(false); }
+      try {
+        const found = await searchPlaces(query);
+        if (alive) { setResults(found); setActionError(''); }
+      } catch {
+        if (alive) setActionError('Place search is unavailable. Check the backend and try again.');
+      } finally {
+        if (alive) setSearching(false);
+      }
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
   }, [query]);
 
-  function pick(place) {
-    addPlace(room.code, place);
+  async function pick(place) {
+    setActionError('');
+    try {
+      await addPlace(room.code, place);
+    } catch {
+      setActionError('Could not add that place. Check your connection and try again.');
+      return;
+    }
     setRanking((prev) => (prev.includes(place.id) || prev.length >= k ? prev : [...prev, place.id]));
     setQuery('');
     setResults([]);
 
     // Start with category defaults, then replace them when actual business hours arrive.
     // If the lookup fails, the defaults remain and itinerary creation can continue.
-    fetchPlaceHours(place.name).then((hours) => {
-      if (hours) updatePlace(room.code, place.id, { ...hours, hoursSource: 'google' });
-    });
+    fetchPlaceHours(place.name)
+      .then((hours) => {
+        if (hours) return updatePlace(room.code, place.id, { ...hours, hoursSource: 'google' });
+        setHoursWarning('Business hours are unavailable. Category defaults remain active and can be edited by the host.');
+        return null;
+      })
+      .catch(() => setHoursWarning('Business hours could not be verified. Category defaults remain active and can be edited by the host.'));
+  }
+
+  async function submit() {
+    setSubmitting(true); setActionError('');
+    try { await submitRanking(room.code, me.id, ranking); }
+    catch { setActionError('Could not synchronize your ranking. Please try again.'); }
+    finally { setSubmitting(false); }
+  }
+
+  async function analyze() {
+    setSubmitting(true); setActionError('');
+    try { await patchRoom(room.code, { status: 'analyzing', optimizationState: 'idle', optimizationOwner: null }); }
+    catch { setActionError('Could not start optimization. Check your connection and try again.'); setSubmitting(false); }
   }
 
   function toggleRank(placeId) {
@@ -70,18 +102,18 @@ export default function PlacePicker({ room, me, isHost }) {
         me.submitted && isHost ? (
           <button
             className="btn-accent"
-            disabled={submittedCount < 2}
-            onClick={() => patchRoom(room.code, { status: 'analyzing' })}
+            disabled={submittedCount < 2 || submitting}
+            onClick={analyze}
           >
-            Combine Preferences and Build Routes ({submittedCount} submitted)
+            {submitting ? 'Starting Optimization...' : `Combine Preferences and Build Routes (${submittedCount} submitted)`}
           </button>
         ) : (
           <button
             className="btn-primary"
-            disabled={ranking.length === 0}
-            onClick={() => submitRanking(room.code, me.id, ranking)}
+            disabled={ranking.length === 0 || submitting}
+            onClick={submit}
           >
-            {me.submitted ? 'Resubmit Ranking' : `Submit Ranking for ${ranking.length} Places`}
+            {submitting ? 'Saving Ranking...' : me.submitted ? 'Resubmit Ranking' : `Submit Ranking for ${ranking.length} Places`}
           </button>
         )
       }
@@ -96,6 +128,8 @@ export default function PlacePicker({ room, me, isHost }) {
           />
         </label>
         {searching && <p className="tl-note" style={{ marginTop: 8 }}>Searching...</p>}
+        {actionError && <p className="tl-note" style={{ color: 'var(--accent)', marginTop: 8 }}>{actionError}</p>}
+        {hoursWarning && <p className="tl-note" style={{ color: 'var(--accent)', marginTop: 8 }}>{hoursWarning}</p>}
         {results.length > 0 && (
           <div className="list" style={{ marginTop: 10 }}>
             {results.map((p) => (

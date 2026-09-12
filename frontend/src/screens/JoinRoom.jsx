@@ -4,6 +4,20 @@ import { joinRoom } from '../lib/roomStore';
 
 export default function JoinRoom({ room, onJoined }) {
   const [nickname, setNickname] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState('');
+
+  async function join() {
+    setJoining(true);
+    setError('');
+    try {
+      onJoined(await joinRoom(room.code, nickname.trim()));
+    } catch {
+      setError('Could not join this room. Check your connection and try again.');
+    } finally {
+      setJoining(false);
+    }
+  }
   return (
     <Screen
       step={4}
@@ -12,10 +26,10 @@ export default function JoinRoom({ room, onJoined }) {
       footer={
         <button
           className="btn-accent"
-          disabled={!nickname.trim()}
-          onClick={() => onJoined(joinRoom(room.code, nickname.trim()))}
+          disabled={!nickname.trim() || joining}
+          onClick={join}
         >
-          Join Room
+          {joining ? 'Joining...' : 'Join Room'}
         </button>
       }
     >
@@ -25,6 +39,7 @@ export default function JoinRoom({ room, onJoined }) {
         <p className="muted" style={{ marginBottom: 0 }}>
           No sign-in is required. Choose the name other members will see.
         </p>
+        {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
       </div>
 
       <div className="card">

@@ -7,14 +7,23 @@ export default function Landing() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  const [joining, setJoining] = useState(false);
 
-  function enter() {
+  async function enter() {
     const target = code.trim().toUpperCase();
-    if (!readRoom(target)) {
-      setError('Room not found. Please check the code and try again.');
-      return;
+    setJoining(true);
+    setError('');
+    try {
+      if (!await readRoom(target)) {
+        setError('Room not found. Please check the code and try again.');
+        return;
+      }
+      navigate(`/r/${target}`);
+    } catch {
+      setError('Room lookup is unavailable. Please check your connection and try again.');
+    } finally {
+      setJoining(false);
     }
-    navigate(`/r/${target}`);
   }
 
   return (
@@ -44,8 +53,8 @@ export default function Landing() {
             maxLength={4}
             style={{ letterSpacing: 4, fontWeight: 700 }}
           />
-          <button className="btn-ghost" style={{ flex: 'none' }} onClick={enter} disabled={code.length < 4}>
-            Join
+          <button className="btn-ghost" style={{ flex: 'none' }} onClick={enter} disabled={code.length < 4 || joining}>
+            {joining ? 'Checking...' : 'Join'}
           </button>
         </div>
         {error && <p className="tl-note" style={{ color: 'var(--accent)', marginTop: 8 }}>{error}</p>}
