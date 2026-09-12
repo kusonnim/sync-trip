@@ -38,17 +38,23 @@ The ten user-flow steps are grouped into six screens. Numbers in parentheses ref
 
 Room state uses five values: `setup → collecting → analyzing → voting → confirmed`. Subscribing to Firestore's `status` field will synchronize screen transitions for every member.
 
-### Picks per Person
+### Adding and Ranking Are Separate
 
-The handwritten note says that input should increase with trip length and decrease with group size. Implement that rule as:
+There is no limit on how many places a member may add, and the cart is shared with the whole group.
+From that cart each member ranks a **top 3**. Adding says "here is an option"; ranking says
+"I want to go here", and merging the two blurs the signal.
 
 ```text
-Places available per day = 4
-Total slots S = 4 × trip days
-Picks per person k = clamp(ceil(S × 1.5 / headcount), 3, 10)
+First choice 3 points, second 2, third 1  (Borda)
+A place that was only added and never ranked scores 0
 ```
 
-Required places are always included. Fill the remaining `S - requiredCount` slots with the highest preference scores. Use Borda scoring with `weight for rank r = k - r + 1`.
+Required places are always included. Fill the remaining `4 × trip days - requiredCount` slots with
+the highest preference scores. A zero-score place can still take a leftover slot.
+
+An earlier version derived picks per person from the handwritten note
+("more days, more picks; more people, fewer picks"), but that formula capped how many places a member
+could add at all, which read as a bug. Adding is now unlimited and the ranking is fixed at 3.
 
 ---
 
@@ -74,8 +80,7 @@ rooms/{roomCode}/places/{placeId}
   addedBy
   openTime, closeTime                 // 'HH:mm', Google Places or category defaults
   hoursSource                         // 'google' | 'default' | 'manual'
-  fixedTime                           // Reservation time; hard constraint
-  bestTime                            // Soft constraint
+  visitWindow                         // { start, end } scheduled visit; hard constraint
   minStay, maxStay                    // Minutes
 
 rooms/{roomCode}/preferences/{memberId}
@@ -204,6 +209,16 @@ This pairwise check is O(m²), much cheaper than permutation search, so run it *
 
 Google Places is the only planned API that may incur direct charges. During development, use saved response fixtures. Before making live calls, state the expected request count and cost and obtain approval. Without approval, use category defaults and manual entry and report that fallback.
 
+**How business hours get filled.** Category defaults go in the moment a place is added.
+`/api/place/details` is then called and overwrites them with real hours. If that lookup fails or
+returns nothing, the defaults remain so itinerary creation never stalls. A value the host edits by
+hand wins over both and sets `hoursSource` to `manual`. The screen shows which source produced the
+value on display.
+
+**Scheduled visits.** A place with a reservation or a must-arrive hour carries a `visitWindow`.
+A start alone means that exact time; a start and an end mean anytime in between. The value passes
+straight through as the contract's `hard_constraint`, and any order that violates it is dropped.
+
 Category defaults when Google data is unavailable:
 
 | Category | Business Hours | Default Stay |
@@ -269,7 +284,7 @@ Dropping Track 2 removes the public-transit accuracy claim, so remove maps and i
 5. The two options use different orders, and `min_time` has the shorter travel time.
 6. An N-day input produces N daily routes, each starting and ending at the configured locations.
 7. Dates begin on the requested start date, guarding against UTC date shifts.
-8. Picks per person and Borda scores match the section 1 formula.
+8. Borda scores sum to 3/2/1, an unranked place scores 0, and entries past the top 3 are ignored.
 
 **End-to-end demo:** Rehearse twice. Create a room on three phones, submit different rankings, and add an 18:00 reservation to confirm that two options appear. Then add a deliberately conflicting reservation and show the conflict notice. Conflict diagnosis is a central judging point and belongs in the demo script.
 

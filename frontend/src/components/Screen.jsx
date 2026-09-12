@@ -1,15 +1,21 @@
-export default function Screen({ step, title, subtitle, children, footer }) {
+// Every screen renders inside one framed card, with the primary action pinned to its foot.
+export default function Screen({ title, subtitle, children, footer, centered }) {
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <h1>{title}</h1>
-          {subtitle && <p className="sub">{subtitle}</p>}
-        </div>
-        {step && <span className="step-badge">STEP {step}</span>}
-      </header>
-      {children}
-      {footer && <div className="bottom-bar">{footer}</div>}
+    <div className="page">
+      <div className="app">
+        {centered ? (
+          children
+        ) : (
+          <>
+            <header className="topbar">
+              <h1>{title}</h1>
+              {subtitle && <p className="sub">{subtitle}</p>}
+            </header>
+            <div className="screen-body">{children}</div>
+          </>
+        )}
+        {footer && <div className="bottom-bar">{footer}</div>}
+      </div>
     </div>
   );
 }

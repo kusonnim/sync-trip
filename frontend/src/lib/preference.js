@@ -1,24 +1,19 @@
-// Combine individual rankings into a group preference score using the PRD section 1 rules.
+// Combine individual rankings into a group preference score.
 //
-//   Places per day = 4
-//   Total slots S = 4 * trip days
-//   Picks per person k = clamp(ceil(S * 1.5 / headcount), 3, 10)
-//   Rank r weight = k - r + 1 (Borda)
+// There is no limit on how many places a member may add. From those, each member
+// ranks a top 3. Rank r weight = TOP_N - r + 1, so first place scores 3, second 2, third 1.
+// A place that was only added and never ranked scores 0, which separates
+// "here is an option" from "I want to go here".
 
 export const SLOTS_PER_DAY = 4;
+export const TOP_N = 3;
 
-export function picksPerPerson(dayCount, headcount) {
-  const slots = SLOTS_PER_DAY * dayCount;
-  const raw = Math.ceil((slots * 1.5) / Math.max(1, headcount));
-  return Math.min(10, Math.max(3, raw));
-}
-
-export function scorePlaces(places, preferences, k) {
+export function scorePlaces(places, preferences, topN = TOP_N) {
   const score = new Map(places.map((p) => [p.id, 0]));
   Object.values(preferences).forEach((ranking) => {
-    ranking.forEach((placeId, index) => {
+    ranking.slice(0, topN).forEach((placeId, index) => {
       if (!score.has(placeId)) return;
-      score.set(placeId, score.get(placeId) + Math.max(1, k - index));
+      score.set(placeId, score.get(placeId) + (topN - index));
     });
   });
   return places.map((p) => ({ ...p, score: score.get(p.id) ?? 0 }));

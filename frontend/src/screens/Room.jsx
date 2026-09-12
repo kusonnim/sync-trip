@@ -19,8 +19,10 @@ export default function Room() {
 
   if (!room) {
     return (
-      <Screen title="Room Not Found">
-        <p className="muted">Check the code. Only rooms created in this browser are available.</p>
+      <Screen title="방을 찾을 수 없어요" subtitle="코드를 다시 확인해 주세요">
+        <div className="card">
+          <p className="muted">이 브라우저에서 만들거나 참여한 방만 열 수 있습니다.</p>
+        </div>
       </Screen>
     );
   }

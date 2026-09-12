@@ -97,12 +97,22 @@ export function joinRoom(code, nickname) {
   return id;
 }
 
+// Identity lives in sessionStorage, not localStorage. Room data must be shared across tabs,
+// but "who am I" must differ per tab so two people can be demonstrated in one browser.
 export function getMyId(code) {
-  return localStorage.getItem(ME + code);
+  try {
+    return sessionStorage.getItem(ME + code);
+  } catch {
+    return null;
+  }
 }
 
 export function setMyId(code, id) {
-  localStorage.setItem(ME + code, id);
+  try {
+    sessionStorage.setItem(ME + code, id);
+  } catch {
+    // Even if storage is blocked, the screen keeps the id in React state.
+  }
 }
 
 export function addPlace(code, place) {
@@ -142,6 +152,9 @@ export function castVote(code, memberId, routeId) {
 
 export function resetLocalRooms() {
   Object.keys(localStorage)
-    .filter((k) => k.startsWith(PREFIX) || k.startsWith(ME))
+    .filter((k) => k.startsWith(PREFIX))
     .forEach((k) => localStorage.removeItem(k));
+  Object.keys(sessionStorage)
+    .filter((k) => k.startsWith(ME))
+    .forEach((k) => sessionStorage.removeItem(k));
 }

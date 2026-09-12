@@ -1,10 +1,25 @@
 import { useEffect, useState } from 'react';
 import Screen from '../components/Screen';
+import PlaceTimeEditor from '../components/PlaceTimeEditor';
 import { searchPlaces, fetchPlaceHours } from '../lib/api';
-import { addPlace, submitRanking, patchRoom, updatePlace } from '../lib/roomStore';
-import { picksPerPerson } from '../lib/preference';
+import { addPlace, submitRanking, patchRoom, updatePlace, removePlace } from '../lib/roomStore';
+import { TOP_N } from '../lib/preference';
 import { categoryLabel } from '../lib/categories';
-import { daysBetween } from '../lib/time';
+import { durationText } from '../lib/time';
+
+function visitText(place) {
+  const w = place.visitWindow;
+  if (!w) return '';
+  return w.start === w.end ? ` · ${w.start} 방문` : ` · ${w.start}~${w.end} 방문`;
+}
+
+function metaText(place) {
+  return (
+    `${categoryLabel(place.category)} · ${place.openTime}~${place.closeTime}` +
+    `${place.hoursSource === 'manual' ? ' (직접)' : ''}` +
+    `${visitText(place)}${place.isFixed ? ' · 필수' : ''}`
+  );
+}
 
 export default function PlacePicker({ room, me, isHost }) {
   const [query, setQuery] = useState('');
@@ -12,8 +27,8 @@ export default function PlacePicker({ room, me, isHost }) {
   const [searching, setSearching] = useState(false);
   const [ranking, setRanking] = useState(room.preferences[me.id] ?? []);
   const [editing, setEditing] = useState(null);
+  const [rankFull, setRankFull] = useState(false);
 
-  const k = picksPerPerson(daysBetween(room.startDate, room.endDate), room.headcount);
   const submittedCount = room.members.filter((m) => m.submitted).length;
 
   useEffect(() => {
@@ -27,9 +42,10 @@ export default function PlacePicker({ room, me, isHost }) {
     return () => { alive = false; clearTimeout(timer); };
   }, [query]);
 
-  function pick(place) {
+  // Adding is unlimited. If the ranking still has room, the new place goes in too.
+  function add(place) {
     addPlace(room.code, place);
-    setRanking((prev) => (prev.includes(place.id) || prev.length >= k ? prev : [...prev, place.id]));
+    setRanking((prev) => (prev.includes(place.id) || prev.length >= TOP_N ? prev : [...prev, place.id]));
     setQuery('');
     setResults([]);
 
@@ -40,11 +56,17 @@ export default function PlacePicker({ room, me, isHost }) {
     });
   }
 
-  function toggleRank(placeId) {
+  function promote(placeId) {
     setRanking((prev) => {
-      if (prev.includes(placeId)) return prev.filter((id) => id !== placeId);
-      return prev.length >= k ? prev : [...prev, placeId];
+      if (prev.length >= TOP_N) { setRankFull(true); return prev; }
+      setRankFull(false);
+      return [...prev, placeId];
     });
+  }
+
+  function demote(placeId) {
+    setRankFull(false);
+    setRanking((prev) => prev.filter((id) => id !== placeId));
   }
 
   function move(placeId, delta) {
@@ -59,21 +81,21 @@ export default function PlacePicker({ room, me, isHost }) {
   }
 
   const placeById = Object.fromEntries(room.places.map((p) => [p.id, p]));
-  const target = editing ? placeById[editing] : null;
+  const pool = room.places.filter((p) => !ranking.includes(p.id));
+  const toggleEditor = (id) => setEditing(editing === id ? null : id);
 
   return (
     <Screen
-      step={5}
-      title="Choose Your Preferred Places"
-      subtitle={`${ranking.length} / ${k} selected · ${submittedCount} members submitted`}
+      title="가고 싶은 곳 고르기"
+      subtitle={`${room.places.length}곳 담음 · 내 순위 ${ranking.length}/${TOP_N} · ${submittedCount}명 제출 완료`}
       footer={
         me.submitted && isHost ? (
           <button
             className="btn-accent"
-            disabled={submittedCount < 2}
+            disabled={submittedCount < 1}
             onClick={() => patchRoom(room.code, { status: 'analyzing' })}
           >
-            Combine Preferences and Build Routes ({submittedCount} submitted)
+            의견 취합하고 경로 만들기 ({submittedCount}명 제출)
           </button>
         ) : (
           <button
@@ -81,52 +103,29 @@ export default function PlacePicker({ room, me, isHost }) {
             disabled={ranking.length === 0}
             onClick={() => submitRanking(room.code, me.id, ranking)}
           >
-            {me.submitted ? 'Resubmit Ranking' : `Submit Ranking for ${ranking.length} Places`}
+            {me.submitted ? '순위 다시 제출하기' : `${ranking.length}곳 순위 제출하기`}
           </button>
         )
       }
     >
       <div className="card">
-        <label className="field" style={{ marginBottom: 0 }}>
-          <span>Search for Places</span>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search for a place you want to visit"
-          />
-        </label>
-        {searching && <p className="tl-note" style={{ marginTop: 8 }}>Searching...</p>}
+        <div className="card-title">장소 검색</div>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="가고 싶은 여행지를 검색하세요"
+        />
+        <p className="hint">담는 개수는 제한이 없고, 순위는 {TOP_N}곳까지만 매깁니다.</p>
+        {searching && <p className="hint">찾는 중...</p>}
         {results.length > 0 && (
-          <div className="list" style={{ marginTop: 10 }}>
+          <div className="list">
             {results.map((p) => (
-              <button key={p.id} className="item" style={{ textAlign: 'left' }} onClick={() => pick(p)}>
+              <div className="item" key={p.id}>
                 <div className="grow">
                   <div className="name">{p.name}</div>
                   <div className="meta">{categoryLabel(p.category)} · {p.address}</div>
                 </div>
-                <span className="chip">Add</span>
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="card-title">My Ranking ({ranking.length}/{k})</div>
-        {ranking.length === 0 ? (
-          <p className="empty-state">Search for and add places you want to visit.</p>
-        ) : (
-          <div className="list">
-            {ranking.map((id, index) => (
-              <div className="item" key={id}>
-                <span className="rank-dot">{index + 1}</span>
-                <div className="grow">
-                  <div className="name">{placeById[id]?.name}</div>
-                  <div className="meta">{categoryLabel(placeById[id]?.category)}</div>
-                </div>
-                <button className="btn-ghost btn-sm" onClick={() => move(id, -1)} disabled={index === 0}>Up</button>
-                <button className="btn-ghost btn-sm" onClick={() => move(id, 1)} disabled={index === ranking.length - 1}>Down</button>
-                <button className="btn-ghost btn-sm" onClick={() => toggleRank(id)}>Remove</button>
+                <button className="pill-filled" onClick={() => add(p)}>담기</button>
               </div>
             ))}
           </div>
@@ -134,87 +133,75 @@ export default function PlacePicker({ room, me, isHost }) {
       </div>
 
       <div className="card">
-        <div className="card-title">Places Added by the Group: {room.places.length}</div>
+        <div className="card-title">내 순위</div>
         <div className="list">
-          {room.places.map((p) => (
+          {ranking.map((id, index) => {
+            const place = placeById[id];
+            if (!place) return null;
+            return (
+              <div className="item item-stack" key={id}>
+                <div className="item-head">
+                  <span className="rank-dot">{index + 1}</span>
+                  <div className="grow">
+                    <div className="name">{place.name}</div>
+                    <div className="meta">{metaText(place)}</div>
+                  </div>
+                  <div className="rank-label">{index + 1}순위</div>
+                </div>
+                <div className="item-actions">
+                  <button className="pill" onClick={() => move(id, -1)} disabled={index === 0}>위로</button>
+                  <button className="pill" onClick={() => move(id, 1)} disabled={index === ranking.length - 1}>아래로</button>
+                  {isHost && <button className="pill" onClick={() => toggleEditor(id)}>시간</button>}
+                  <button className="pill" onClick={() => demote(id)}>빼기</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {ranking.length === 0 && (
+          <p className="empty-state">아직 순위를 매긴 곳이 없어요. 아래 담은 곳에서 "순위에"를 눌러 주세요.</p>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">담은 곳</div>
+          <div className="count">{pool.length}곳</div>
+        </div>
+        <div className="list">
+          {pool.map((p) => (
             <div className="item" key={p.id}>
-              <span className={ranking.includes(p.id) ? 'rank-dot' : 'rank-dot empty'}>
-                {ranking.includes(p.id) ? ranking.indexOf(p.id) + 1 : '+'}
-              </span>
               <div className="grow">
                 <div className="name">{p.name}</div>
-                <div className="meta">
-                  {p.openTime}~{p.closeTime}
-                  {p.fixedTime ? ` · ${p.fixedTime} reservation` : ''}
-                  {p.isFixed ? ' · Required' : ''}
-                </div>
+                <div className="meta">{metaText(p)} · {durationText(p.minStay ?? 60)} 체류</div>
               </div>
-              {!ranking.includes(p.id) && (
-                <button className="btn-ghost btn-sm" onClick={() => toggleRank(p.id)}>Add</button>
-              )}
-              {isHost && (
-                <button className="btn-ghost btn-sm" onClick={() => setEditing(editing === p.id ? null : p.id)}>
-                  Hours
-                </button>
-              )}
+              <div className="item-actions">
+                <button className="pill-filled" onClick={() => promote(p.id)}>순위에</button>
+                {isHost && (
+                  <>
+                    <button className="pill" onClick={() => toggleEditor(p.id)}>시간</button>
+                    <button className="pill" onClick={() => removePlace(room.code, p.id)}>삭제</button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
-          {room.places.length === 0 && <p className="empty-state">No one has added a place yet.</p>}
         </div>
-
-        {target && (
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--line)' }}>
-            <div className="card-title">Set Times for {target.name}</div>
-            <p className="tl-note" style={{ marginTop: -6 }}>
-              These business hours are category defaults. Update them here if they differ or you have a reservation.
-            </p>
-            <div className="row">
-              <label className="field">
-                <span>Opens</span>
-                <input
-                  type="time"
-                  value={target.openTime ?? ''}
-                  onChange={(e) => updatePlace(room.code, editing, { openTime: e.target.value, hoursSource: 'manual' })}
-                />
-              </label>
-              <label className="field">
-                <span>Closes</span>
-                <input
-                  type="time"
-                  value={target.closeTime ?? ''}
-                  onChange={(e) => updatePlace(room.code, editing, { closeTime: e.target.value, hoursSource: 'manual' })}
-                />
-              </label>
-            </div>
-            <div className="row">
-              <label className="field">
-                <span>Reservation Time</span>
-                <input
-                  type="time"
-                  value={target.fixedTime ?? ''}
-                  onChange={(e) => updatePlace(room.code, editing, { fixedTime: e.target.value || null })}
-                />
-              </label>
-              <label className="field">
-                <span>Stay Duration (minutes)</span>
-                <input
-                  type="number"
-                  step={10}
-                  value={target.minStay ?? 60}
-                  onChange={(e) => updatePlace(room.code, editing, { minStay: Number(e.target.value) })}
-                />
-              </label>
-            </div>
-            <button
-              className="btn-ghost"
-              style={{ width: '100%' }}
-              onClick={() => updatePlace(room.code, editing, { isFixed: !target.isFixed })}
-            >
-              {target.isFixed ? 'Remove Required Status' : 'Mark as Required Place'}
-            </button>
-          </div>
+        {pool.length === 0 && (
+          <p className="empty-state">
+            {room.places.length === 0
+              ? '아직 아무도 장소를 담지 않았습니다.'
+              : '담은 곳이 모두 순위에 들어가 있습니다.'}
+          </p>
+        )}
+        {rankFull && (
+          <div className="notice error">순위는 {TOP_N}곳까지예요. 먼저 한 곳을 빼 주세요.</div>
         )}
       </div>
+
+      {isHost && (
+        <PlaceTimeEditor code={room.code} place={placeById[editing]} onClose={() => setEditing(null)} />
+      )}
     </Screen>
   );
 }

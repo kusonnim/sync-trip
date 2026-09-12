@@ -14,6 +14,7 @@ export default function Result({ room, me, isHost }) {
   const votes = room.routes.map((r) => Object.values(room.finalVotes).filter((v) => v === r.type).length);
   const leaderIndex = votes.length ? votes.indexOf(Math.max(...votes)) : -1;
   const winner = room.routes.find((r) => r.type === room.confirmedRouteId) ?? room.routes[leaderIndex];
+  const castCount = Object.keys(room.finalVotes).length;
 
   async function share() {
     try {
@@ -25,52 +26,39 @@ export default function Result({ room, me, isHost }) {
     }
   }
 
-  // On failure, identify the conflict and return users to the editing screen.
+  // The calculation failed. Name the conflict and send the user back to the edit screen.
   if (room.error) {
     return (
-      <Screen step={7} title="We Couldn't Build an Itinerary" subtitle="Adjust the times and try again">
-        <ConflictNotice error={room.error} places={room.places} />
-        <div className="bottom-bar">
+      <Screen
+        title="일정을 만들지 못했어요"
+        subtitle="시간을 조정하면 다시 계산합니다"
+        footer={
           <button
             className="btn-primary"
             onClick={() => patchRoom(room.code, { status: 'collecting', error: null })}
           >
-            Edit Places and Times
+            장소와 시간 고치러 가기
           </button>
-        </div>
-      </Screen>
-    );
-  }
-
-  if (confirmed && winner) {
-    return (
-      <Screen step={10} title="Your Itinerary Is Confirmed" subtitle={room.title}>
-        <div className="notice" style={{ background: '#eaf7f0', color: '#1d7048' }}>
-          <strong>{winner.label} selected.</strong>
-          <div style={{ marginTop: 4 }}>
-            Total travel time: {durationText(winner.total_time)} · Estimated fare: {won(winner.total_cost)}
-          </div>
-        </div>
-        <RouteCard route={winner} open onToggle={() => {}} />
-        <div className="bottom-bar">
-          <button className="btn-primary" onClick={share}>
-            {copied ? 'Link Copied' : 'Share Itinerary Link'}
-          </button>
-        </div>
+        }
+      >
+        <ConflictNotice error={room.error} places={room.places} />
       </Screen>
     );
   }
 
   return (
     <Screen
-      step={9}
-      title="Which Itinerary Should We Choose?"
-      subtitle={`${Object.keys(room.finalVotes).length} / ${room.members.length} members voted`}
+      title={confirmed ? '이 일정으로 확정했어요' : '어느 일정으로 갈까요'}
+      subtitle={`${castCount} / ${room.members.length}명 투표`}
       footer={
-        isHost ? (
+        confirmed ? (
+          <button className="btn-good" onClick={share}>
+            {copied ? '링크를 복사했어요' : '일정 링크 공유하기'}
+          </button>
+        ) : isHost ? (
           <button
-            className="btn-accent"
-            disabled={Object.keys(room.finalVotes).length === 0}
+            className="btn-primary"
+            disabled={castCount === 0}
             onClick={() =>
               patchRoom(room.code, {
                 status: 'confirmed',
@@ -78,27 +66,41 @@ export default function Result({ room, me, isHost }) {
               })
             }
           >
-            Confirm the Most Popular Route
+            최다 득표안으로 확정하기
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
-            The itinerary will appear when the host confirms it
+            대표자가 확정하면 일정이 나옵니다
           </button>
         )
       }
     >
-      <p className="muted">
-        We built two routes with different goals from the same candidates. Both respect business hours and reservations.
-      </p>
-      {room.routes.map((route, i) => (
+      {confirmed && winner && (
+        <div className="notice good">
+          <span>{winner.label} 안으로 확정했어요</span>
+          <span className="sub">
+            이동 {durationText(winner.total_time)} · 요금 {won(winner.total_cost)}
+          </span>
+        </div>
+      )}
+
+      {!confirmed && (
+        <p className="muted">
+          {room.routes.length > 1
+            ? '같은 후보로 목적이 다른 두 안을 만들었어요. 둘 다 영업시간과 지정한 방문 시각을 지킵니다.'
+            : '시간 제약이 빡빡해 가능한 일정이 하나뿐이에요. 이 안은 영업시간과 지정한 방문 시각을 모두 지킵니다.'}
+        </p>
+      )}
+
+      {(confirmed && winner ? [winner] : room.routes).map((route) => (
         <RouteCard
           key={route.type}
           route={route}
-          open={open === route.type}
+          open={confirmed ? true : open === route.type}
           onToggle={() => setOpen(open === route.type ? null : route.type)}
-          votes={votes[i]}
+          votes={confirmed ? undefined : votes[room.routes.indexOf(route)]}
           myVote={myVote}
-          onVote={(type) => castVote(room.code, me.id, type)}
+          onVote={confirmed ? undefined : (type) => castVote(room.code, me.id, type)}
         />
       ))}
     </Screen>

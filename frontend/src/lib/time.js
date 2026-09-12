@@ -11,22 +11,23 @@ export function toHHMM(minutes) {
   return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+// Everything below renders on screen, so the wording stays Korean.
 export function durationText(minutes) {
   const m = Math.round(minutes);
-  if (m < 60) return `${m} min`;
+  if (m < 60) return `${m}분`;
   const h = Math.floor(m / 60);
   const rest = m % 60;
-  return rest ? `${h} hr ${rest} min` : `${h} hr`;
+  return rest ? `${h}시간 ${rest}분` : `${h}시간`;
 }
 
 export function won(value) {
-  return `₩${Math.round(value).toLocaleString('en-US')}`;
+  return `${Math.round(value).toLocaleString('ko-KR')}원`;
 }
 
 export function dateLabel(iso) {
   const d = new Date(`${iso}T00:00:00`);
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  return `${days[d.getDay()]}, ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 }
 
 export function daysBetween(startISO, endISO) {
