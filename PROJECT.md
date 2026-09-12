@@ -240,7 +240,6 @@ Never return a bare "no route found". Name the two places that collide so the us
 2. **Hard Constraint Validation:**
 * Check if arrival happens later than a place's closing time, or if the minimum stay does not fit before `close_time`.
 * Check if arrival falls within the user-defined reservation window (`hard_constraint`).
-* Force restaurants into a lunch (11:30–13:30) or dinner (17:30–19:30) start.
 * Check that returning to `end_location` lands before `end_deadline`.
 * Drop violating routes immediately using `continue`.
 
