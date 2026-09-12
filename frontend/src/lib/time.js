@@ -1,4 +1,4 @@
-// 'HH:mm' 문자열과 분 단위 정수 사이를 오간다. 알고리즘은 전부 분 단위로 계산한다.
+// Convert between 'HH:mm' strings and integer minutes. All algorithm calculations use minutes.
 
 export function toMinutes(hhmm) {
   const [h, m] = String(hhmm).split(':').map(Number);
@@ -13,20 +13,20 @@ export function toHHMM(minutes) {
 
 export function durationText(minutes) {
   const m = Math.round(minutes);
-  if (m < 60) return `${m}분`;
+  if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
   const rest = m % 60;
-  return rest ? `${h}시간 ${rest}분` : `${h}시간`;
+  return rest ? `${h} hr ${rest} min` : `${h} hr`;
 }
 
 export function won(value) {
-  return `${Math.round(value).toLocaleString('ko-KR')}원`;
+  return `₩${Math.round(value).toLocaleString('en-US')}`;
 }
 
 export function dateLabel(iso) {
   const d = new Date(`${iso}T00:00:00`);
-  const days = ['일', '월', '화', '수', '목', '금', '토'];
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `${days[d.getDay()]}, ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 }
 
 export function daysBetween(startISO, endISO) {
@@ -36,7 +36,7 @@ export function daysBetween(startISO, endISO) {
   return Math.max(1, diff + 1);
 }
 
-// toISOString 은 UTC 로 바꾸므로 한국 시간에서는 하루가 당겨진다. 로컬 값으로 직접 만든다.
+// toISOString converts to UTC and can shift the date, so build the local value directly.
 function toISODate(d) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

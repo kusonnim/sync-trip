@@ -1,18 +1,18 @@
-// 구글 Places 영업시간을 못 받았을 때 즉시 대체하는 카테고리 기본값.
-// PRD 5절의 표와 같은 값이다.
+// Category defaults used when Google Places business hours are unavailable.
+// These values match the table in PRD section 5.
 
 export const CATEGORY_DEFAULTS = {
-  restaurant: { label: '식당', open: '11:00', close: '21:00', stay: 60 },
-  cafe: { label: '카페', open: '10:00', close: '22:00', stay: 50 },
-  attraction: { label: '관광지', open: '09:00', close: '18:00', stay: 90 },
-  museum: { label: '미술관·박물관', open: '10:00', close: '18:00', stay: 80 },
-  shopping: { label: '쇼핑', open: '10:30', close: '21:00', stay: 70 },
+  restaurant: { label: 'Restaurant', open: '11:00', close: '21:00', stay: 60 },
+  cafe: { label: 'Cafe', open: '10:00', close: '22:00', stay: 50 },
+  attraction: { label: 'Attraction', open: '09:00', close: '18:00', stay: 90 },
+  museum: { label: 'Museum', open: '10:00', close: '18:00', stay: 80 },
+  shopping: { label: 'Shopping', open: '10:30', close: '21:00', stay: 70 },
 };
 
 export const CATEGORY_ORDER = Object.keys(CATEGORY_DEFAULTS);
 
 export function categoryLabel(key) {
-  return CATEGORY_DEFAULTS[key]?.label ?? '기타';
+  return CATEGORY_DEFAULTS[key]?.label ?? 'Other';
 }
 
 export function applyCategoryDefaults(place) {

@@ -1,22 +1,22 @@
-// 백엔드 /api/optimize 가 붙기 전까지 프론트 혼자 경로를 만들어내는 임시 엔진.
-// 요청과 응답 모양은 PROJECT.md 4절 ③ 과 똑같다. 백엔드가 준비되면
-// api.js 의 USE_MOCK 이 꺼지면서 이 파일은 더 이상 쓰이지 않는다.
+// Temporary engine that lets the frontend build routes before /api/optimize is available.
+// Request and response shapes match PROJECT.md section 4.3. When the backend is ready,
+// USE_MOCK in api.js is disabled and this file is no longer used.
 //
-// PROJECT.md 5절 Track 1 과 같은 규칙을 쓰되 실제 길찾기 API 는 부르지 않는다.
+// It follows the PROJECT.md section 5 Track 1 rules without calling a live routing API.
 
 import { toMinutes, toHHMM, durationText, daysBetween, listDates } from './time.js';
 
 const DETOUR = 1.3;
 const SPEED = { car: 40, transit: 22 }; // km/h
-const WAIT = { car: 0, transit: 8 }; // 분
+const WAIT = { car: 0, transit: 8 }; // minutes
 const LUNCH = [toMinutes('11:30'), toMinutes('13:30')];
 const DINNER = [toMinutes('17:30'), toMinutes('19:30')];
 const MAX_PER_DAY = 4;
 
-// PROJECT.md 5절 3번. min_time 은 이동 시간, min_cost 는 비용을 먼저 본다.
+// PROJECT.md section 5.3: min_time prioritizes travel time; min_cost prioritizes cost.
 const OBJECTIVES = [
-  { type: 'min_time', label: '최소 시간', wt: 1.0, wc: 0.0 },
-  { type: 'min_cost', label: '최소 비용', wt: 0.2, wc: 0.1 },
+  { type: 'min_time', label: 'Fastest Route', wt: 1.0, wc: 0.0 },
+  { type: 'min_cost', label: 'Lowest-Cost Route', wt: 0.2, wc: 0.1 },
 ];
 const PREFERENCE_WEIGHT = 3;
 
@@ -53,18 +53,18 @@ function permutations(items) {
   return out;
 }
 
-// 식사 시작 시각이 점심 또는 저녁 창 안에 들어와야 한다.
-// 창 끝에 몇 분만 걸치는 배치를 막으려고 겹침이 아니라 시작 시각으로 판정한다.
+// A meal must start within the lunch or dinner window.
+// Check the start time, not overlap, to prevent visits that only catch the end of a window.
 function inMealSlot(start) {
   const within = ([from, to]) => start >= from && start <= to;
   return within(LUNCH) || within(DINNER);
 }
 
 function instructionFor(mode, minutes) {
-  return `${mode === 'transit' ? '대중교통' : '자차'} ${durationText(minutes)}`;
+  return `${mode === 'transit' ? 'Public transit' : 'Drive'} ${durationText(minutes)}`;
 }
 
-// 순열 하나를 시뮬레이션한다. 제약을 어기면 null 을 돌려준다.
+// Simulate one permutation and return null when it violates a constraint.
 function simulate(order, ctx) {
   const { origin, destination, mode, startAt, deadline } = ctx;
   const timeline = [{ type: 'place', name: origin.name, time: toHHMM(startAt) }];
@@ -80,11 +80,11 @@ function simulate(order, ctx) {
     const close = toMinutes(place.close_time);
     const window = place.hard_constraint;
 
-    // 예약 창을 못 맞추면 폐기한다
+    // Reject routes that miss the reservation window.
     if (window && arrive > toMinutes(window.end)) return null;
     const start = Math.max(arrive, open, window ? toMinutes(window.start) : 0);
     if (window && start > toMinutes(window.end)) return null;
-    // 영업 종료 전에 최소 체류를 못 채우면 폐기한다
+    // Reject routes that cannot fit the minimum stay before closing.
     if (start + place.stay_time_min > close) return null;
     if (place.category === 'restaurant' && !inMealSlot(start)) return null;
 
@@ -116,7 +116,7 @@ function simulate(order, ctx) {
 
   const back = leg(prev, destination, mode);
   const finish = cursor + back.minutes;
-  if (finish > deadline) return null; // 해산 시각 초과
+  if (finish > deadline) return null; // Past the daily deadline.
 
   timeline.push({
     type: 'transit',
@@ -138,8 +138,8 @@ function simulate(order, ctx) {
 }
 
 /**
- * PROJECT.md 5절 4번. 예약이 있는 장소 쌍만 검사하므로 순열 탐색보다 훨씬 싸다.
- * 그래서 탐색 전에 먼저 돌린다.
+ * PROJECT.md section 5.4. Checking only pairs with reservations is much cheaper than
+ * permutation search, so run this first.
  */
 export function findConflicts(places, mode) {
   const fixed = places.filter((p) => p.hard_constraint);
@@ -156,10 +156,9 @@ export function findConflicts(places, mode) {
         out.push({
           place_ids: [early.place_id, late.place_id],
           message:
-            `${early.name} ${early.hard_constraint.start} 예약과 ` +
-            `${late.name} ${late.hard_constraint.start} 예약은 ` +
-            `머무는 시간과 이동에 ${need}분이 필요해 함께 갈 수 없습니다. ` +
-            `둘 중 한 곳의 시간을 조정해 주세요.`,
+            `The ${early.hard_constraint.start} reservation at ${early.name} conflicts with ` +
+            `the ${late.hard_constraint.start} reservation at ${late.name}. ` +
+            `The stay and travel require ${need} minutes. Adjust the time for one of these places.`,
         });
       }
     }
@@ -167,7 +166,7 @@ export function findConflicts(places, mode) {
   return out;
 }
 
-// PROJECT.md 5절 0번. 좌표로 날짜 수만큼 나누고 하루 정원을 넘기지 않게 채운다.
+// PROJECT.md section 5.0. Split by coordinates across trip days without exceeding daily capacity.
 function splitByDay(places, dayCount) {
   if (dayCount <= 1) return [places];
   const seeds = [places[0]];
@@ -198,8 +197,8 @@ function splitByDay(places, dayCount) {
 }
 
 /**
- * @param {object} body PROJECT.md 4절 ③ 의 요청 본문
- * @returns PROJECT.md 4절 ③ 의 응답
+ * @param {object} body Request body from PROJECT.md section 4.3
+ * @returns Response from PROJECT.md section 4.3
  */
 export function optimizeLocally(body) {
   const { settings, places } = body;
@@ -234,8 +233,8 @@ export function optimizeLocally(body) {
       status: 'error',
       code: 'NO_ROUTE',
       message:
-        '영업시간과 해산 시각 안에 들어가는 순서를 찾지 못했습니다. ' +
-        '장소를 줄이거나 해산 시각을 늦춰 주세요.',
+        'No route fits within the business hours and daily deadline. ' +
+        'Remove a place or choose a later deadline.',
       place_ids: [],
     };
   }
@@ -248,7 +247,7 @@ export function optimizeLocally(body) {
           (obj.wt * a.total_time + obj.wc * a.total_cost - a.preference * PREFERENCE_WEIGHT) -
           (obj.wt * b.total_time + obj.wc * b.total_cost - b.preference * PREFERENCE_WEIGHT),
       );
-      // 두 안의 순서가 같아지면 차순위로 대체해 항상 서로 다른 선택지를 준다.
+      // If both objectives choose the same order, use the runner-up to keep the options distinct.
       const pick = ranked.find((c) => !used.has(`${dayIndex}:${c.order}`)) ?? ranked[0];
       used.add(`${dayIndex}:${pick.order}`);
       return {

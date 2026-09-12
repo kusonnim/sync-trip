@@ -1,7 +1,7 @@
-// 백엔드 호출을 한곳에 모은다. 요청과 응답 모양은 PROJECT.md 4절 규약을 따른다.
-// .env 에 VITE_API_BASE 를 넣으면 USE_MOCK 이 꺼지고 실제 백엔드를 부른다.
+// Centralize backend calls. Request and response shapes follow the PROJECT.md section 4 contract.
+// Setting VITE_API_BASE in .env disables USE_MOCK and calls the real backend.
 //
-// 외부 API 키는 전부 백엔드에만 둔다. 여기에 카카오·ODsay·구글 키를 넣지 않는다.
+// Keep all external API keys in the backend. Never add Kakao, ODsay, or Google keys here.
 
 import { searchMockPlaces } from './mockPlaces.js';
 import { optimizeLocally } from './mockOptimize.js';
@@ -15,7 +15,7 @@ async function request(path, options) {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  if (!res.ok) throw new Error(`${path} 실패 (${res.status})`);
+  if (!res.ok) throw new Error(`${path} failed (${res.status})`);
   return res.json();
 }
 
@@ -40,19 +40,19 @@ export async function searchPlaces(keyword) {
 
 /** PROJECT.md ② GET /api/place/details?name= */
 export async function fetchPlaceHours(name) {
-  if (USE_MOCK) return null; // 목업에서는 카테고리 기본값을 그대로 쓴다
+  if (USE_MOCK) return null; // The mock keeps the category defaults.
   try {
     const body = await request(`/api/place/details?name=${encodeURIComponent(name)}`);
     if (body.status !== 'success') return null;
     return { openTime: body.data.open_time, closeTime: body.data.close_time };
   } catch {
-    return null; // 영업시간을 못 받아도 일정 생성은 계속되어야 한다
+    return null; // Itinerary creation must continue when business hours are unavailable.
   }
 }
 
 /**
- * 방 상태와 후보 장소를 PROJECT.md ③ 의 요청 본문으로 바꾼다.
- * 화면은 camelCase 로 다루고 백엔드는 snake_case 로 받으므로 변환은 여기서만 한다.
+ * Convert room state and candidate places into the PROJECT.md section 3 request body.
+ * The UI uses camelCase and the backend accepts snake_case, so conversion happens only here.
  */
 export function buildOptimizeBody(room, candidates) {
   return {
@@ -75,7 +75,7 @@ export function buildOptimizeBody(room, candidates) {
       stay_time_max: p.maxStay,
       open_time: p.openTime,
       close_time: p.closeTime,
-      // 화면에서는 예약 시각 하나만 입력받고, 규약의 창 모양으로 넓혀 보낸다.
+      // The UI accepts one reservation time and expands it into the contract's window shape.
       hard_constraint: p.fixedTime ? { start: p.fixedTime, end: p.fixedTime } : null,
       preference_score: p.score ?? 0,
     })),

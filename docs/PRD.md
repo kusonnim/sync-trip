@@ -1,72 +1,63 @@
-# SyncTrip PRD — 소셜 투표 기반 시간제약 여행 동선 최적화
+# SyncTrip PRD — Social-Voting Travel Route Optimization with Time Constraints
 
 ## Context
 
-기획서 텍스트, 손글씨 메모, 흐름도 이미지 세 자료를 합쳐 만든 제품 정의서다.
-API 명세와 알고리즘의 최종 기준은 [PROJECT.md](../PROJECT.md)이고, 이 문서와 어긋나면 그쪽을 따른다.
+This product definition combines three source materials: the original planning document, handwritten notes, and the user-flow diagram. [PROJECT.md](../PROJECT.md) is the canonical source for API contracts and algorithm behavior; if this document differs, follow PROJECT.md.
 
-현재 프론트엔드는 열 단계가 백엔드 없이 끝까지 돌아간다. 백엔드는 아직 없고,
-프론트에 있는 임시 엔진이 규약과 같은 모양으로 응답을 만들어 대신 답한다.
+The frontend currently supports the complete ten-step flow without a backend. A temporary frontend engine returns responses in the same shape as the backend contract.
 
-해결하는 문제: 단톡방에 장소 링크만 쌓이고 일정이 확정되지 않는다. 기존 여행 앱은 거리순 정렬만 지원해
-"식당 18시 예약", "미술관 17시 마감" 같은 시간 제약을 반영하지 못한다.
+**Problem:** Place links pile up in group chats without producing a finalized plan. Existing travel apps usually sort by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM.
 
-결과물: 그룹원이 희망지를 순위로 내면 선호 점수로 후보를 좁히고, 영업시간과 예약 시간을 지키면서
-이동 시간과 비용을 최소화한 일자별 타임라인 2안을 만들어 팀이 투표로 확정하는 모바일 웹앱.
+**Product:** A mobile web application where members rank preferred places, the group preference score narrows the candidates, and the system creates a fastest route and a lowest-cost route that respect business hours and reservations. Members vote to confirm the final itinerary.
 
-세 자료가 어긋나던 지점은 아래로 확정했다.
+The following decisions resolve inconsistencies among the source materials:
 
-| 쟁점 | 확정 |
+| Topic | Decision |
 |---|---|
-| 의견 수집 | 개인별 1~n순위 입력 후 선호 점수 합산 (흐름도 기준) |
-| 결과 | 최소 시간·최소 비용 2안 제시 후 팀원 재투표 |
-| 목적 함수 | 시간과 비용 둘 다 |
-| 여행 기간 | N일 자유 지정 |
-| 길찾기 | 대중교통 ODsay, 자차 카카오모빌리티 |
-| 장소 정보 | 카카오 로컬 검색 + 구글 Places 영업시간, 수동 덮어쓰기 |
-| 스택 | React(Vercel) + Firestore + Python FastAPI |
-| 개발 시간 | 9시간 |
+| Preference collection | Each member submits a 1-to-n ranking; the app combines preference scores |
+| Results | Show fastest and lowest-cost routes, then hold a member vote |
+| Objectives | Optimize both time and cost |
+| Trip length | Any number of days |
+| Routing | ODsay for public transit and Kakao Mobility for driving |
+| Place data | Kakao Local search plus Google Places business hours and manual overrides |
+| Stack | React on Vercel, Firestore, and Python FastAPI |
+| Development window | Nine hours |
 
 ---
 
-## 1. 사용자 플로우와 화면
+## 1. User Flow and Screens
 
-흐름도 10단계를 6개 화면으로 묶는다. 괄호 안은 흐름도 단계 번호다.
+The ten user-flow steps are grouped into six screens. Numbers in parentheses refer to the diagram.
 
-1. **랜딩** (1) — 서비스 소개, "여행 만들기", 방 코드 입력칸.
-2. **여행 기본정보** (2) — 대표자만. 여행 날짜 범위, 하루 시작·종료 시각, 인원수, 출발지, 최종 도착지, 이동수단, 고정 여행지.
-3. **방 생성 및 대기** (3, 4) — 4자리 방 코드와 초대 링크. 닉네임으로 입장한 팀원 목록이 실시간으로 늘어난다.
-4. **희망지 입력** (5) — 장소 검색 후 1~n순위 지정. 제출 인원 카운터가 실시간 갱신된다.
-5. **분석 중** (6) — 선호 점수 집계, 후보 확정, 일자 분배, 최적화 진행 상태를 단계별로 표시.
-6. **2안 비교 및 확정** (7, 8, 9, 10) — 최소 시간·최소 비용 카드 2장. 카드를 열면 일자별 타임라인이 펼쳐진다.
-   팀원이 한 표씩 던지고 대표자가 확정하면 공유 링크가 나온다. 지도는 아직 없고 컷라인 아래에 있다.
+1. **Landing** (1) — Service introduction, Create a Trip action, and room-code entry.
+2. **Trip details** (2) — Host only. Date range, daily start and end times, headcount, start and final destinations, transportation mode, and required places.
+3. **Room creation and lobby** (3, 4) — Four-character room code and invitation link. Members join with nicknames, and the list updates in real time.
+4. **Place preferences** (5) — Search for places and submit a ranked list. The submitted-member counter updates in real time.
+5. **Optimization** (6) — Display progress for preference scoring, candidate selection, day assignment, and route optimization.
+6. **Compare and confirm** (7, 8, 9, 10) — Show a fastest-route card and a lowest-cost-route card. Expanding a card reveals the daily timelines. Each member casts one vote; the host confirms the winner and receives a shareable link. Maps are not implemented.
 
-방 상태는 `setup → collecting → analyzing → voting → confirmed` 다섯 단계로 관리하고, 화면 전환은
-Firestore의 `status` 필드를 구독해서 전원에게 동시에 일어나게 한다.
+Room state uses five values: `setup → collecting → analyzing → voting → confirmed`. Subscribing to Firestore's `status` field will synchronize screen transitions for every member.
 
-### 1인당 입력 개수 규칙
+### Picks per Person
 
-손글씨 메모의 "여행일수 ∝ n, 인원 ∝ 1/n"을 다음 식으로 구현한다.
+The handwritten note says that input should increase with trip length and decrease with group size. Implement that rule as:
 
-```
-하루 방문 가능 장소 = 4
-총 슬롯 S = 4 × 여행일수
-1인당 입력 개수 k = clamp(ceil(S × 1.5 / 인원수), 3, 10)
+```text
+Places available per day = 4
+Total slots S = 4 × trip days
+Picks per person k = clamp(ceil(S × 1.5 / headcount), 3, 10)
 ```
 
-후보 확정은 고정 여행지를 무조건 포함하고, 나머지 `S - 고정개수`개를 선호 점수 상위순으로 채운다.
-선호 점수는 Borda 방식으로 `순위 r의 가중치 = k - r + 1`을 쓴다.
+Required places are always included. Fill the remaining `S - requiredCount` slots with the highest preference scores. Use Borda scoring with `weight for rank r = k - r + 1`.
 
 ---
 
-## 2. 데이터 모델
+## 2. Data Model
 
-아래는 Firestore 목표 구조다. 지금은 `frontend/src/lib/roomStore.js` 가 방 하나를
-localStorage 의 객체 하나로 들고 있고, 서브컬렉션 자리는 배열과 객체로 들어가 있다.
-Firestore 를 붙일 때 그 파일의 함수 본문만 교체하면 화면 코드는 그대로 둔다.
+The following is the target Firestore structure. `frontend/src/lib/roomStore.js` currently stores each room as one localStorage object, with arrays and objects standing in for subcollections. Migrating to Firestore should require changes only to that file's function bodies, not the screen components.
 
-```
-rooms/{roomCode}                      // 4자리 대문자+숫자
+```text
+rooms/{roomCode}                      // Four uppercase letters or digits
   status, title, hostToken
   startDate, endDate, dailyStart, dailyEnd
   headcount, transportMode            // 'car' | 'transit'
@@ -79,242 +70,213 @@ rooms/{roomCode}/members/{memberId}
 
 rooms/{roomCode}/places/{placeId}
   name, lat, lng, category, kakaoId, address
-  isFixed                             // 고정 여행지 여부
+  isFixed                             // Whether this is a required place
   addedBy
-  openTime, closeTime                 // 'HH:mm', 구글 Places 또는 카테고리 기본값
+  openTime, closeTime                 // 'HH:mm', Google Places or category defaults
   hoursSource                         // 'google' | 'default' | 'manual'
-  fixedTime                           // 예약 시각, Hard Constraint
-  bestTime                            // Soft Constraint
-  minStay, maxStay                    // 분 단위
+  fixedTime                           // Reservation time; hard constraint
+  bestTime                            // Soft constraint
+  minStay, maxStay                    // Minutes
 
 rooms/{roomCode}/preferences/{memberId}
-  ranking: [placeId, ...]             // 1순위부터 순서대로
+  ranking: [placeId, ...]             // Ordered from first choice
 
-rooms/{roomCode}/routes                // /api/optimize 응답의 routes 배열을 그대로 저장
+rooms/{roomCode}/routes                // Store the /api/optimize routes array as-is
   [{ type, label, total_time, total_cost, days: [{ date, timeline: [...] }] }]
 
-rooms/{roomCode}/error                 // 계산 실패 시에만 채워진다
+rooms/{roomCode}/error                 // Present only when optimization fails
   { code, message, placeIds }
 
 rooms/{roomCode}/finalVotes/{memberId}
   routeId
 ```
 
-`timeline` 항목 하나의 모양 (PROJECT.md 4절 ③ 과 같다):
+A `timeline` entry has the same shape as PROJECT.md section 4.3:
 
 ```json
-{ "type": "transit", "mode": "transit", "instruction": "2호선 건대입구 → 성수",
+{ "type": "transit", "mode": "transit", "instruction": "Line 2, Konkuk University → Seongsu",
   "time": "13:56 ~ 14:20", "duration": 24, "cost": 1500 }
-{ "type": "place", "place_id": "p3", "name": "성수 카페", "category": "cafe",
+{ "type": "place", "place_id": "p3", "name": "Seongsu Cafe", "category": "cafe",
   "time": "14:20 ~ 15:20", "stay_duration": 60, "wait_duration": 0 }
 ```
 
-보안상 카카오·ODsay·구글 키는 전부 FastAPI 서버에만 두고, 프론트에는 Firebase 웹 설정만 둔다.
-Vite의 `VITE_` 접두사에는 어떤 외부 API 키도 넣지 않는다.
+For security, keep Kakao, ODsay, and Google keys only on the FastAPI server. The frontend contains only Firebase web configuration. Never expose external API keys through Vite's `VITE_` prefix.
 
 ---
 
-## 3. 백엔드 API (FastAPI)
+## 3. Backend API (FastAPI)
 
-| 엔드포인트 | 역할 |
+| Endpoint | Responsibility |
 |---|---|
-| `GET /api/search?keyword=` | 카카오 로컬 키워드 검색 프록시. 이름, 좌표, 카테고리 반환 |
-| `GET /api/place/details?name=` | 구글 Places 영업시간 조회. 결과를 캐시 |
-| `POST /api/optimize` | 설정과 후보 장소를 받아 2안 반환. 핵심 엔드포인트 |
+| `GET /api/search?keyword=` | Proxy Kakao Local keyword search and return names, coordinates, and categories |
+| `GET /api/place/details?name=` | Fetch and cache Google Places business hours |
+| `POST /api/optimize` | Accept settings and candidate places and return two route options |
 
-요청과 응답의 정확한 필드는 PROJECT.md 4절 ③ 이 기준이다. 이 문서와 어긋나면 PROJECT.md 를 따른다.
-응답은 `min_time` 과 `min_cost` 두 개이고, 해가 없으면 `status: "error"` 와 `code: "TIME_CONFLICT"` 에
-부딪히는 장소 두 곳을 담아 보낸다.
+PROJECT.md section 4.3 defines the exact request and response fields. Return both `min_time` and `min_cost`. If no solution exists, return `status: "error"`, `code: "TIME_CONFLICT"`, and the two conflicting places.
 
 ---
 
-## 4. 최적화 알고리즘
+## 4. Optimization Algorithm
 
-### 4-1. 일자 분배
+### 4.1 Day Assignment
 
-가장 멀리 떨어진 장소들을 날짜 수만큼 씨앗으로 잡고, 나머지를 가까운 씨앗에 붙이되
-하루 정원 4곳을 넘기지 않게 채운다. 그 다음 각 날을 독립적으로 최적화한다.
-매일 같은 출발지와 도착지를 쓴다고 가정해 숙소 로직은 생략한다.
+Choose the most geographically separated places as seeds, one per trip day. Assign every remaining place to its nearest seed without exceeding four places per day, then optimize each day independently. Assume the same start and end locations every day; lodging logic is out of scope.
 
-예약이 걸린 장소를 특정 날짜에 고정하는 기능은 아직 없다. 지금은 좌표만 보고 나눈다.
+Places with reservations cannot yet be pinned to a specific day. Assignment currently uses coordinates only.
 
-### 4-2. Track 1 — 순서 확정용 가계산
+### 4.2 Track 1 — Estimated Order Selection
 
-하루 장소 수는 최대 6개이므로 순열 720개를 완전 탐색한다. 이동 시간은 API를 부르지 않고 정적 추정치를 쓴다.
+A day contains at most six places, so exhaustively search up to 720 permutations. Estimate travel without calling external APIs:
 
-```
-직선거리 = haversine(i, j)
-실거리   = 직선거리 × 1.3
-자차     = 실거리 / 40km/h
-대중교통 = 실거리 / 22km/h + 대기 8분
+```text
+straight-line distance = haversine(i, j)
+road distance          = straight-line distance × 1.3
+driving                 = road distance / 40 km/h
+public transit          = road distance / 22 km/h + 8-minute wait
 ```
 
-각 순열을 출발 시각부터 순차 시뮬레이션한다.
+Simulate each permutation from the configured start time. Field names match the PROJECT.md section 4.3 request body.
 
-필드 이름은 PROJECT.md 4절 ③ 요청 본문과 같다.
-
-```
-arrive = prev_depart + travel(i, j)
+```text
+arrive = previous_departure + travel(i, j)
 start  = max(arrive, open_time, hard_constraint.start)
-    Hard: hard_constraint 있으면 start 가 그 창을 벗어나면 폐기
-    Hard: start + stay_time_min <= close_time 이어야 함, 아니면 폐기
-    Hard: category == 'restaurant' 이면 start 가 점심 11:30~13:30
-          또는 저녁 17:30~19:30 안에서 시작해야 함
-depart = start + stay          // stay_time_min 기본, 여유 있으면 stay_time_max 까지 확장
-마지막: end_location 도착 <= end_deadline 아니면 폐기
+    Hard: reject if start falls outside hard_constraint
+    Hard: require start + stay_time_min <= close_time
+    Hard: restaurants must start during lunch (11:30–13:30)
+          or dinner (17:30–19:30)
+depart = start + stay          // Use stay_time_min; extend toward stay_time_max when possible
+final: require arrival at end_location <= end_deadline
 ```
 
-식사 슬롯은 겹침이 아니라 **시작 시각**으로 판정한다. 창 끝에 몇 분만 걸치는 배치를 막기 위해서다.
+Meal windows are validated by **start time**, not overlap, so a visit cannot qualify by touching only the end of the window.
 
-살아남은 순열을 목적 함수로 채점한다.
+Score surviving permutations with:
 
+```text
+J = wt × total travel minutes + wc × total cost − wp × sum(preference_score)
 ```
-J = wt × 총이동분 + wc × 총비용 − wp × preference_score 합
-```
 
-`preference_score` 는 팀 순위를 Borda 로 합산한 값이고 가중치는 3을 쓴다. 동점을 팀 취향으로 가른다.
-베스트 타임 가산점(Soft Constraint)은 아직 넣지 않았다.
+`preference_score` is the group's Borda total. Its weight is 3 and breaks ties in favor of group preferences. Best-time bonuses are not yet implemented.
 
-| 안 | wt | wc | 성격 |
-|---|---|---|---|
-| min_time | 1.0 | 0.0 | 최소 이동 시간 |
-| min_cost | 0.2 | 0.1 | 최소 비용 |
+| Route | wt | wc | Goal |
+|---|---:|---:|---|
+| `min_time` | 1.0 | 0.0 | Minimum travel time |
+| `min_cost` | 0.2 | 0.1 | Minimum cost |
 
-두 안의 순열이 같아지면 차순위 순열로 대체해 항상 서로 다른 2안을 내놓는다.
-720개 순열 × 3일이면 파이썬에서 0.1초 이내다.
+If both objectives choose the same permutation, use the next-ranked permutation so the group always receives two distinct options. Searching 720 permutations across three days takes less than 0.1 seconds in Python.
 
-### 4-3. Track 2 — 정밀 길찾기
+### 4.3 Track 2 — Precise Routing
 
-확정된 순열의 구간에 대해서만 실제 API를 부른다. 하루 5곳이면 구간 6개, 두 안이 겹치는 구간은
-`(출발좌표, 도착좌표, 이동수단)` 키로 메모리 캐시해 중복을 없앤다. 3일 여행 기준 호출은 20~40회 수준이다.
+Call live routing APIs only for legs in the selected permutations. A five-place day has six legs. Cache shared legs between the two route options by `(origin coordinates, destination coordinates, transportation mode)`. A three-day trip should require roughly 20–40 calls.
 
-- 대중교통: ODsay `searchPubTransPathT` — 소요 시간, 환승 횟수, 노선명, 요금
-- 자차: 카카오모빌리티 `directions` — 거리, 소요 시간, 통행료. 유류비는 `거리 × 140원/km`로 계산
+- Public transit: ODsay `searchPubTransPathT` for time, transfers, line names, and fares
+- Driving: Kakao Mobility `directions` for distance, time, and tolls; estimate fuel as `distance × ₩140/km`
 
-실제 소요 시간이 추정치보다 커서 제약을 깨면, 그 안에 `warning` 플래그를 달아 카드에 표시하고
-차순위 순열로 한 번만 재시도한다. 무한 재계산은 하지 않는다.
+If live travel time breaks a constraint that the estimate satisfied, add a `warning` flag to the route card and retry once with the next-ranked permutation. Do not recalculate indefinitely.
 
-Track 2 는 백엔드 몫이라 아직 없다. 지금은 Track 1 의 추정치가 그대로 타임라인에 들어간다.
+Track 2 belongs in the backend and is not implemented. The current timeline uses Track 1 estimates.
 
-### 4-4. 충돌 진단
+### 4.4 Conflict Diagnosis
 
-해가 0개일 때 "가능한 루트가 없습니다"라고 하지 않는다. 고정 시각이 있는 장소 쌍을 전수 검사한다.
+Do not return a generic no-route message when no permutations survive. First examine every pair of places with fixed reservations:
 
-```
-for i, j in hard_constraint 가 있는 장소 쌍:
+```text
+for i, j in pairs of places with hard_constraint:
     if |start_j − start_i| < travel(i, j) + stay_time_min_i:
-        TIME_CONFLICT 보고, place_ids 에 두 곳을 담는다
+        return TIME_CONFLICT with both IDs in place_ids
 ```
 
-메시지 예: "성수 맛집 18:00 예약과 남산타워 18:10 예약은 이동에 32분이 걸려 함께 갈 수 없습니다.
-둘 중 한 곳의 시간을 조정해 주세요." 영업 종료 위반, 데드라인 초과도 같은 방식으로 원인을 특정한다.
-이 검사는 O(m²)라 순열 탐색보다 훨씬 싸므로 탐색 **전에** 먼저 돌려 명백한 충돌을 조기에 잡는다.
+Example: “The 18:00 reservation at the Seongsu restaurant conflicts with the 18:10 reservation at N Seoul Tower. Travel requires 32 minutes. Adjust one reservation.” Diagnose closing-time and deadline failures similarly.
+
+This pairwise check is O(m²), much cheaper than permutation search, so run it **before** the search to catch obvious conflicts early.
 
 ---
 
-## 5. 외부 API와 비용
+## 5. External APIs and Cost
 
-| API | 용도 | 비용 |
+| API | Purpose | Cost |
 |---|---|---|
-| 카카오 로컬 | 장소 검색, 좌표, 카테고리 | 무료 |
-| 카카오모빌리티 Directions | 자차 경로, 거리, 통행료 | 무료 한도 내 |
-| ODsay | 대중교통 노선, 환승, 요금 | 무료 1일 1000건 |
-| 구글 Places | 영업시간 | **결제 계정 필요, 한도 초과 시 과금** |
-| Firebase | 실시간 동기화 | Spark 무료 |
+| Kakao Local | Place search, coordinates, and category | Free |
+| Kakao Mobility Directions | Driving routes, distance, and tolls | Within free allowance |
+| ODsay | Public-transit routes, transfers, and fares | 1,000 free requests per day |
+| Google Places | Business hours | **Billing account required; charges may apply above the allowance** |
+| Firebase | Real-time synchronization | Free Spark plan |
 
-구글 Places만 돈이 나간다. 개발 중에는 저장해 둔 응답 픽스처로 작업하고, 실제 호출은 하기 전에
-몇 건을 부를지와 예상 금액을 알려 승인을 받는다. 승인이 없으면 영업시간은 카테고리 기본값과
-수동 입력으로 채우고 그 사실을 그대로 보고한다.
+Google Places is the only planned API that may incur direct charges. During development, use saved response fixtures. Before making live calls, state the expected request count and cost and obtain approval. Without approval, use category defaults and manual entry and report that fallback.
 
-카테고리 기본값 표 (구글 응답이 없을 때 즉시 대체):
+Category defaults when Google data is unavailable:
 
-| 카테고리 | 영업 | 기본 체류 |
-|---|---|---|
-| 식당 | 11:00~21:00 | 60분 |
-| 카페 | 10:00~22:00 | 50분 |
-| 관광지 | 09:00~18:00 | 90분 |
-| 미술관·박물관 | 10:00~18:00 | 80분 |
-| 쇼핑 | 10:30~21:00 | 70분 |
+| Category | Business Hours | Default Stay |
+|---|---|---:|
+| Restaurant | 11:00–21:00 | 60 minutes |
+| Cafe | 10:00–22:00 | 50 minutes |
+| Attraction | 09:00–18:00 | 90 minutes |
+| Museum | 10:00–18:00 | 80 minutes |
+| Shopping | 10:30–21:00 | 70 minutes |
 
 ---
 
-## 6. 남은 일과 순서
+## 6. Remaining Work and Order
 
-9시간 중 프론트엔드 한 덩어리가 끝났다. 아래는 지금 시점에서 남은 일이다.
+The frontend portion of the nine-hour build is complete. Remaining work is split into parallel tracks, ordered by priority:
 
-### 끝난 것
+| Priority | Work | Owner | Notes |
+|---:|---|---|---|
+| 1 | FastAPI skeleton, CORS, and `/api/optimize` stub | Backend | Create the stub first so the frontend can connect |
+| 2 | Kakao Local proxy at `/api/search` | Backend | Replaces the 16 mock places immediately |
+| 3 | Python optimizer: Track 1 and conflict diagnosis | Backend | Match the temporary frontend engine |
+| 4 | Connect frontend and backend through `VITE_API_BASE` | Shared | Minimum viable live demo |
+| 5 | Track 2 live routing with ODsay and Kakao Mobility | Backend | Adds line names to the timeline |
+| 6 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
+| 7 | Google Places hours at `/api/place/details` | Backend | Requires cost approval before live calls |
+| 8 | Map markers and routes | Frontend | Above the cut line if time remains |
+| 9 | Result-image export | Frontend | First feature to drop |
 
-- 화면 10단계 전부. 방 생성, 초대 코드, 닉네임 입장, 장소 검색과 순위 입력, 분석, 2안 비교, 투표, 확정
-- 방 상태를 구독해 전원 화면이 같이 넘어가는 구조
-- 제약을 지키는 최적화 엔진 (프론트 임시 구현, 검증 14개 통과)
-- 선호 점수 집계와 후보 선정
-- 충돌 진단과 안내 화면
+Firestore appears lower in this list, but it is required for a multi-device demo. A two-tab demo on one machine works with the current implementation, so choose the demo format before reprioritizing.
 
-### 남은 것
+### Completed
 
-트랙을 나눠 병렬로 간다. 위에 있을수록 먼저다.
+- All ten interface steps: room creation, invitation code, nickname entry, place search and ranking, optimization, two-route comparison, voting, and confirmation
+- Shared room-status subscription architecture
+- Constraint-aware temporary frontend optimizer with 14 passing checks
+- Preference scoring and candidate selection
+- Conflict diagnosis and its UI
 
-| 순위 | 일 | 담당 | 비고 |
-|---|---|---|---|
-| 1 | FastAPI 뼈대와 CORS, `/api/optimize` 스텁 | 백엔드 | 프론트가 바로 붙을 수 있게 스텁부터 |
-| 2 | 카카오 로컬 검색 프록시 `/api/search` | 백엔드 | 붙는 즉시 목업 장소 16곳을 대체 |
-| 3 | 파이썬 최적화 엔진 (Track 1 + 충돌 진단) | 백엔드 | 프론트 임시 엔진과 같은 규칙 |
-| 4 | `VITE_API_BASE` 로 프론트와 백엔드 실연결 | 공통 | 여기까지가 데모 최소선 |
-| 5 | Track 2 실제 길찾기 (ODsay, 카카오모빌리티) | 백엔드 | 노선 이름이 타임라인에 들어간다 |
-| 6 | Firestore 연결 | 프론트 | `roomStore.js` 함수 본문만 교체 |
-| 7 | 구글 Places 영업시간 `/api/place/details` | 백엔드 | 호출 전에 비용 승인 필요 |
-| 8 | 지도 마커와 경로 | 프론트 | 컷라인 위쪽, 시간 남으면 |
-| 9 | 결과 이미지 저장 | 프론트 | 가장 먼저 버릴 항목 |
+### Cut Line
 
-6번 Firestore 는 순위가 낮아 보이지만 실제 여러 기기로 시연하려면 필요하다.
-한 대에서 탭 두 개로 시연할 계획이라면 지금 상태로도 충분하다. 시연 방식을 먼저 정하고 순위를 조정한다.
+**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. **The current frontend already meets this line.** The temporary engine can support the demo if the backend is late.
 
-### 컷라인
+**Drop in this order if delayed:**
 
-**반드시 되어야 하는 것** — 방 생성과 입장, 장소 검색과 순위 입력, 시간 제약을 지킨 2안 생성,
-일자별 타임라인 표시, 최종 투표와 확정. **이 줄은 지금 이미 만족한다.**
-백엔드가 늦어도 임시 엔진으로 시연할 수 있다.
+1. Result-image export
+2. Map routes
+3. Google Places hours; use category defaults and manual entry
+4. Firestore; demonstrate with localStorage in one browser
+5. Track 2 live routing; show Track 1 estimates without line details
 
-**늦어지면 버리는 순서** — 위에서부터 먼저 버린다.
-
-1. 결과 이미지 저장
-2. 지도 경로
-3. 구글 Places 영업시간 → 카테고리 기본값과 수동 입력
-4. Firestore → localStorage 로 한 기기에서 시연
-5. Track 2 정밀 호출 → Track 1 추정치로 타임라인 표시, 노선 정보는 생략
-
-5번까지 내려가면 대중교통 정확도 어필이 사라지므로, 그 전에 지도와 이미지를 먼저 포기한다.
+Dropping Track 2 removes the public-transit accuracy claim, so remove maps and image export first.
 
 ---
 
-## 7. 검증
+## 7. Verification
 
-**알고리즘 검증** — 외부 API 없이 돌아간다. 프론트에서 `npm run check` 로 14개가 실행되고 전부 통과 중이다.
-백엔드 엔진이 생기면 같은 항목을 파이썬 쪽에서도 통과시킨다. 스크립트는 `frontend/scripts/check-optimizer.mjs` 다.
+**Algorithm checks:** `npm run check` runs 14 checks without external APIs, and all currently pass. When the backend engine is implemented, run equivalent Python checks. The script is `frontend/scripts/check-optimizer.mjs`.
 
-1. 예약 창이 있는 장소가 그 창 안에서 방문을 시작하는가
-2. 영업 종료 전에 최소 체류를 못 채우는 순열이 폐기되고 `NO_ROUTE` 가 나오는가
-3. 식당이 점심 또는 저녁 슬롯에서만 시작하는가
-4. 18:00과 18:10 예약이 부딪힐 때 `TIME_CONFLICT` 와 두 장소 이름이 나오는가
-5. 두 안이 서로 다른 순서이고 min_time의 총 이동 시간이 더 짧은가
-6. N일을 넣으면 날짜 수만큼 나뉘고, 각 날이 출발지에서 시작해 도착지에서 끝나는가
-7. 날짜가 입력한 시작일부터 시작하는가 (UTC 변환으로 하루 밀리는 문제를 잡은 자리다)
-8. 1인당 입력 개수와 Borda 선호 점수가 1절 식과 맞는가
+1. A reserved place starts within its reservation window.
+2. A permutation that cannot fit the minimum stay before closing is rejected with `NO_ROUTE`.
+3. A restaurant starts only in a lunch or dinner window.
+4. Conflicting 18:00 and 18:10 reservations return `TIME_CONFLICT` and both place names.
+5. The two options use different orders, and `min_time` has the shorter travel time.
+6. An N-day input produces N daily routes, each starting and ending at the configured locations.
+7. Dates begin on the requested start date, guarding against UTC date shifts.
+8. Picks per person and Borda scores match the section 1 formula.
 
-**엔드투엔드 시연 시나리오** — 리허설로 두 번 돌린다.
-휴대폰 3대로 방을 만들고, 각자 다른 순위를 내고, 한 장소에 18:00 예약을 걸어 2안이 나오는지 확인한다.
-그 뒤 일부러 충돌하는 예약을 하나 더 넣어 충돌 안내가 뜨는 것까지 보여준다.
-충돌 안내는 심사 어필 포인트이므로 시연 대본에 반드시 넣는다.
+**End-to-end demo:** Rehearse twice. Create a room on three phones, submit different rankings, and add an 18:00 reservation to confirm that two options appear. Then add a deliberately conflicting reservation and show the conflict notice. Conflict diagnosis is a central judging point and belongs in the demo script.
 
-**배포 확인** — Vercel 프론트에서 FastAPI를 부를 때 CORS 허용 도메인을 백엔드 첫 커밋에 같이 넣는다.
-이 항목이 해커톤 막판에 가장 자주 터진다. 프론트는 `vercel.json` 에 SPA 리라이트를 이미 넣어뒀다.
+**Deployment:** Add the Vercel frontend origin to FastAPI CORS configuration in the first backend commit. CORS failures are common late in hackathons. The frontend already includes SPA rewrites in `vercel.json`.
 
 ---
 
-## 8. 심사 어필 정리
+## 8. Judging Pitch
 
-"기존 앱은 거리순 정렬만 합니다. SyncTrip은 여러 명의 희망지를 선호 점수로 합치고, 예약 시각과
-영업 종료 시각을 Hard Constraint로 걸어 불가능한 일정을 수학적으로 걸러냅니다.
-대중교통 경로를 전부 조회하면 느려지므로, 정적 추정치로 순서를 먼저 확정하고 확정된 경로에만
-실제 노선 API를 부르는 Two-Track 구조로 속도와 정확도를 동시에 잡았습니다.
-일정이 불가능할 때는 실패를 알리는 대신 어느 두 장소가 충돌하는지 짚어줍니다."
+“Existing apps sort places by distance. SyncTrip combines multiple travelers' preferences, applies reservation and closing times as hard constraints, and mathematically rejects impossible schedules. Querying every public-transit order would be slow, so its two-track architecture selects the order with static estimates and calls the live routing API only for the winning routes, balancing speed with accuracy. When a schedule is impossible, SyncTrip identifies the exact pair of places in conflict instead of returning a generic failure.”
