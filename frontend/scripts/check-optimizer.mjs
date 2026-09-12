@@ -256,5 +256,25 @@ const stopsOf = (route) =>
   check(`Entries beyond the top ${TOP_N} are ignored`, overBy.d === 0, `d ${overBy.d} points`);
 }
 
+// The singular `accommodation` and `hotel` fields are read as a one-entry list,
+// so a request using either still anchors its middle days at the stay.
+{
+  const places = [
+    place('a', 'Gyeongbokgung Palace', 'attraction', 37.5796, 126.9770),
+    place('b', 'Seoul Forest', 'attraction', 37.5443, 127.0374),
+  ];
+  for (const field of ['accommodation', 'hotel']) {
+    const base = settings({ start_date: '2026-09-19', end_date: '2026-09-21' });
+    delete base.accommodations;
+    const res = optimizeLocally({ settings: { ...base, [field]: HOTEL }, places });
+    const days = res.status === 'success' ? res.routes[0].days : [];
+    check(`A singular ${field} anchors the middle day`,
+      days.length === 3
+        && days[1].timeline.at(0).name === HOTEL.name
+        && days[1].timeline.at(-1).name === HOTEL.name,
+      res.status === 'success' ? `${days[1].timeline.at(0).name} → ${days[1].timeline.at(-1).name}` : res.code);
+  }
+}
+
 console.log(failed ? `\n${failed} checks failed` : '\nAll checks passed');
 process.exit(failed ? 1 : 0);

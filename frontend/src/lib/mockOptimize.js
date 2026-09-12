@@ -230,15 +230,18 @@ function splitByDay(places, dayCount) {
  * accommodation, so one day ends where the next begins.
  * One accommodation covers every night; more are used in order, one per night.
  */
+// Older callers send a single `accommodation` or `hotel`; the contract is a list.
+// Read both through here so every check agrees on whether the trip has one.
+export function resolveStays(settings) {
+  if (settings.accommodations?.length) return settings.accommodations;
+  const single = settings.accommodation ?? settings.hotel;
+  return single ? [single] : [];
+}
+
 function dayAnchors(settings, dayCount) {
   const nights = dayCount - 1;
   if (nights <= 0) return [[settings.start_location, settings.end_location]];
-  const stays = (settings.accommodations && settings.accommodations.length > 0)
-    ? settings.accommodations
-    : (settings.accommodation ? [settings.accommodation] : (settings.hotel ? [settings.hotel] : []));
-  if (stays.length === 0) {
-    return Array.from({ length: dayCount }, () => [settings.start_location, settings.end_location]);
-  }
+  const stays = resolveStays(settings);
   const nightly = Array.from({ length: nights }, (_, night) => stays[Math.min(night, stays.length - 1)]);
   const anchors = [[settings.start_location, nightly[0]]];
   for (let night = 1; night < nights; night += 1) anchors.push([nightly[night - 1], nightly[night]]);
@@ -265,7 +268,7 @@ export function optimizeLocally(body) {
   }
 
   const dates = listDates(settings.start_date, daysBetween(settings.start_date, settings.end_date));
-  if (dates.length > 1 && !(settings.accommodations ?? []).length) {
+  if (dates.length > 1 && !resolveStays(settings).length) {
     return {
       status: 'error',
       code: 'NO_ROUTE',
