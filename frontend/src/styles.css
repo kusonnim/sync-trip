@@ -580,6 +580,31 @@ button:not(:disabled):active { filter: brightness(.96); }
 }
 .add-stay { border-style: dashed; color: var(--brand); }
 
+/* Setup pages share one local form; this keeps short steps visually balanced. */
+.setup-step-shell {
+  min-height: min(470px, calc(100vh - 210px));
+  display: flex;
+  align-items: center;
+}
+.setup-step-shell > .card { width: 100%; }
+.setup-error { margin: 0; }
+
+/* Step 4 keeps the existing wheel mechanics but centers the participant control
+   and drops its old outer frame. */
+.participant-field { align-items: center; }
+.participant-picker {
+  width: 140px;
+  margin-inline: auto;
+}
+.participant-picker .wheel {
+  border: 0;
+  background: transparent;
+}
+
+@media (max-width: 520px) {
+  .setup-step-shell { min-height: calc(100vh - 205px); }
+}
+
 /* The row that follows the finger during a drag. It is a copy, so it carries no
    controls and never receives a press of its own. */
 .dragging-overlay {

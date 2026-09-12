@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "check": "node scripts/check-optimizer.mjs",
+    "test:setup": "node scripts/check-trip-setup.mjs",
     "test:integration": "node scripts/check-room-store.mjs"
   },
   "dependencies": {
