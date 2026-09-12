@@ -11,15 +11,15 @@ export default function TripSetup() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     hostNickname: '',
-    title: '우리 여행',
+    title: '',
     startDate: today,
     endDate: today,
     dailyStart: '10:00',
     dailyEnd: '21:00',
     headcount: 4,
     transportMode: 'transit',
-    originName: '서울역',
-    destinationName: '서울역',
+    originName: '',
+    destinationName: '',
   });
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
@@ -61,36 +61,36 @@ export default function TripSetup() {
       <div className="card" style={{ gap: 14 }}>
         <label className="field">
           <span>닉네임</span>
-          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="예: 민서" />
+          <input value={form.hostNickname} onChange={set('hostNickname')} />
         </label>
         <label className="field">
           <span>여행 이름</span>
-          <input value={form.title} onChange={set('title')} />
+          <input value={form.title} onChange={set('title')} placeholder="ex) 부산 여행" />
         </label>
       </div>
       {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
       <div className="card" style={{ gap: 14 }}>
-        <div className="card-title">날짜와 시간</div>
+        <div className="card-title">날짜와 시각</div>
         <div className="grid-2">
           <label className="field">
-            <span>시작일</span>
+            <span>첫 날</span>
             <input type="date" value={form.startDate} onChange={set('startDate')} />
           </label>
           <label className="field">
-            <span>종료일</span>
+            <span>마지막 날</span>
             <input type="date" value={form.endDate} onChange={set('endDate')} min={form.startDate} />
           </label>
           <label className="field">
-            <span>하루 시작</span>
+            <span>첫 날 여행지 도착 시각</span>
             <input type="time" value={form.dailyStart} onChange={set('dailyStart')} />
           </label>
           <label className="field">
-            <span>귀가 마감</span>
+            <span>마지막 날 귀가 시각</span>
             <input type="time" value={form.dailyEnd} onChange={set('dailyEnd')} />
           </label>
         </div>
-        <p className="hint">총 {dayCount}일 일정으로 계산됩니다.</p>
+        <p className="hint">{dayCount - 1}박 {dayCount}일 일정! 총 {dayCount}일로 계산됩니다.</p>
       </div>
 
       <div className="card" style={{ gap: 14 }}>
@@ -115,14 +115,14 @@ export default function TripSetup() {
       </div>
 
       <div className="card" style={{ gap: 14 }}>
-        <div className="card-title">출발지와 도착지</div>
+        <div className="card-title">일정 시작, 마감 장소</div>
         <label className="field">
-          <span>출발지</span>
-          <input value={form.originName} onChange={set('originName')} />
+          <span>일정 시작 장소</span>
+          <input value={form.originName} onChange={set('originName')} placeholder="ex) 서울역" />
         </label>
         <label className="field">
-          <span>도착지</span>
-          <input value={form.destinationName} onChange={set('destinationName')} />
+          <span>일정 마감 장소</span>
+          <input value={form.destinationName} onChange={set('destinationName')} placeholder="ex) 서울역" />
         </label>
       </div>
     </Screen>

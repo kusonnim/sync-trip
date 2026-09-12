@@ -105,8 +105,8 @@ export default function Result({ room, me, isHost }) {
       {!confirmed && (
         <p className="muted">
           {room.routes.length > 1
-            ? '같은 후보로 목적이 다른 두 안을 만들었어요. 둘 다 영업시간과 지정한 방문 시각을 지킵니다.'
-            : '시간 제약이 빡빡해 가능한 일정이 하나뿐이에요. 이 안은 영업시간과 지정한 방문 시각을 모두 지킵니다.'}
+            ? '같은 후보로 목적이 다른 두 안을 만들었어요.'
+            : '시간 제약이 빡빡해 가능한 일정이 하나뿐이에요.'}
         </p>
       )}
 

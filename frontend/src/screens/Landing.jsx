@@ -42,8 +42,7 @@ export default function Landing() {
 
         <div className="card pad-lg" style={{ gap: 14 }}>
           <p className="muted">
-            각자 가고 싶은 곳에 순위를 매기면, 점수가 높은 곳만 남겨 영업시간과 방문 시각을 지키는
-            하루 단위 일정을 만들어 드려요.
+            각자 가고 싶은 곳에 순위를 매기면, 점수가 높은 곳을 골라 하루 단위 일정을 만들어 드려요.
           </p>
           <div className="chips">
             <span className="chip">투표로 장소 선정</span>
