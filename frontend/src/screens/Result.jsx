@@ -19,6 +19,9 @@ export default function Result({ room, me, isHost }) {
   const leaderIndex = votes.length ? votes.indexOf(Math.max(...votes)) : -1;
   const winner = room.routes.find((r) => r.type === room.confirmedRouteId) ?? room.routes[leaderIndex];
   const castCount = Object.keys(room.finalVotes).length;
+  const winnerCost = room.transportMode === 'car'
+    ? `통행료 ${winner?.total_cost > 0 ? won(winner.total_cost) : '없음'}`
+    : `요금 ${won(winner?.total_cost ?? 0)}`;
 
   async function share() {
     try {
@@ -114,7 +117,7 @@ export default function Result({ room, me, isHost }) {
         <div className="notice good">
           <span>{winner.label} 안으로 확정했어요</span>
           <span className="sub">
-            이동 {durationText(winner.total_time)} · 요금 {won(winner.total_cost)}
+            이동 {durationText(winner.total_time)} · {winnerCost}
           </span>
         </div>
       )}

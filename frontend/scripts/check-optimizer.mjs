@@ -85,6 +85,26 @@ const stopsOf = (route) =>
   check('Reject permutation that violates closing time', res.status === 'error' && res.code === 'NO_ROUTE', res.code ?? 'A route was found');
 }
 
+// 2b. First-day arrival and final-day return belong to different dates.
+{
+  const res = optimizeLocally({
+    settings: settings({
+      start_date: '2026-09-19',
+      end_date: '2026-09-20',
+      start_time: '10:00',
+      end_deadline: '09:00',
+      accommodations: [HOTEL],
+    }),
+    places: [
+      place('early-a', 'Early Stop A', 'attraction', 37.56, 126.98,
+        { open_time: '00:00', close_time: '23:59', stay_time_min: 10 }),
+      place('early-b', 'Early Stop B', 'attraction', 37.57, 126.99,
+        { open_time: '00:00', close_time: '23:59', stay_time_min: 10 }),
+    ],
+  });
+  check('Allow cross-day return clock before first-day arrival clock', res.status === 'success');
+}
+
 // 3. A restaurant visit must start within the lunch or dinner window.
 {
   const places = [

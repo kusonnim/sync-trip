@@ -110,13 +110,29 @@ class TripSettings(BaseModel):
         anchors.append((stays[-1], self.end_location))
         return anchors
 
+    def day_time_bounds(self) -> list[tuple[int, int]]:
+        """Per-day planning bounds for trip-level arrival and return times.
+
+        On a multi-day trip, ``start_time`` belongs only to the first day and
+        ``end_deadline`` only to the last. Interior day bounds span the day.
+        """
+        start = time_to_minutes(self.start_time)
+        deadline = time_to_minutes(self.end_deadline)
+        if self.day_count == 1:
+            return [(start, deadline)]
+        return [
+            (start, 23 * 60 + 59),
+            *[(0, 23 * 60 + 59)] * (self.day_count - 2),
+            (0, deadline),
+        ]
+
     @model_validator(mode="after")
     def validate_settings(self) -> "TripSettings":
         start = time_to_minutes(self.start_time)
         deadline = time_to_minutes(self.end_deadline)
         if self.end_date < self.start_date:
             raise ValueError("end_date must be on or after start_date")
-        if deadline < start:
+        if self.day_count == 1 and deadline < start:
             raise ValueError("end_deadline must be at or after start_time")
         if (self.accommodation or self.hotel) and not self.accommodations:
             acc = self.accommodation or self.hotel

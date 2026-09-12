@@ -41,7 +41,7 @@ export default function Timeline({ timeline }) {
               ) : (
                 <div className="tl-leg">
                   {item.instruction}
-                  {item.cost > 0 ? ` · ${won(item.cost)}` : ''}
+                  {item.cost > 0 ? ` · ${item.mode === 'car' ? '통행료 ' : ''}${won(item.cost)}` : ''}
                   {' · '}
                   {durationText(item.duration)}
                 </div>

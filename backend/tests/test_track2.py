@@ -213,6 +213,15 @@ async def test_multi_day_refinement_keeps_every_day():
 
 
 @pytest.mark.anyio
+async def test_multi_day_refinement_allows_return_clock_before_arrival_clock():
+    result = await optimize_trip_precise(
+        request([], end_date="2026-09-20", start_time="10:00", end_deadline="09:00"),
+        FakeRouting(),
+    )
+    assert result.status == "success"
+
+
+@pytest.mark.anyio
 async def test_only_one_precise_order_is_returned_for_both_options():
     def handler(origin, destination, _mode):
         if origin.name == "Seoul Station" and destination.name == "Place a":

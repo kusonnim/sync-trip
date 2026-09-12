@@ -258,18 +258,23 @@ export function optimizeLocally(body) {
 
   const dates = listDates(settings.start_date, daysBetween(settings.start_date, settings.end_date));
   const buckets = splitByDay([...places], dates.length);
-  const ctx = {
-    mode,
-    startAt: toMinutes(settings.start_time),
-    deadline: toMinutes(settings.end_deadline),
-  };
+  const tripStart = toMinutes(settings.start_time);
+  const tripDeadline = toMinutes(settings.end_deadline);
+  const timeBounds = dates.map((_, dayIndex) => {
+    if (dates.length === 1) return [tripStart, tripDeadline];
+    if (dayIndex === 0) return [tripStart, 23 * 60 + 59];
+    if (dayIndex === dates.length - 1) return [0, tripDeadline];
+    return [0, 23 * 60 + 59];
+  });
   const anchors = dayAnchors(settings, dates.length);
 
-  const perDay = buckets.map((bucket, dayIndex) =>
-    permutations(bucket.slice(0, 6))
+  const perDay = buckets.map((bucket, dayIndex) => {
+    const [startAt, deadline] = timeBounds[dayIndex];
+    const ctx = { mode, startAt, deadline };
+    return permutations(bucket.slice(0, 6))
       .map((order) => simulate(order, ctx, anchors[dayIndex]))
-      .filter(Boolean),
-  );
+      .filter(Boolean);
+  });
 
   if (perDay.some((c) => c.length === 0)) {
     return {

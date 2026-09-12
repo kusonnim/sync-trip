@@ -187,7 +187,7 @@ export default function TripSetup() {
   }
 
   return (
-    <Screen title="여행 기본정보"
+    <Screen title="여행 기본정보" className="setup-app" bodyClassName="setup-screen-body"
       subtitle={`대표자가 먼저 입력합니다 · ${step} / ${TRIP_SETUP_STEPS.length}`}
       back={{ label: step === 1 ? '처음' : '이전', onClick: goBack, disabled: creating }}
       footer={<button className="btn-primary" disabled={!stepReady || creating} onClick={advance}>
@@ -195,6 +195,16 @@ export default function TripSetup() {
           : step === TRIP_SETUP_STEPS.length ? '여행방 만들기' : '다음'}
       </button>}
     >
+      <div
+        className="setup-progress"
+        role="progressbar"
+        aria-label="여행방 설정 진행률"
+        aria-valuemin="1"
+        aria-valuemax={TRIP_SETUP_STEPS.length}
+        aria-valuenow={step}
+      >
+        <span style={{ width: `${(step / TRIP_SETUP_STEPS.length) * 100}%` }} />
+      </div>
       <div className="setup-step-shell" data-step={step}>{renderStep()}</div>
       {error && <p className="tl-note setup-error" style={{ color: 'var(--accent)' }}>{error}</p>}
     </Screen>

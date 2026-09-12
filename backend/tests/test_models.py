@@ -90,11 +90,21 @@ def test_duplicate_place_ids_are_rejected():
         )
 
 
-def test_deadline_before_start_is_rejected():
+def test_same_day_deadline_before_start_is_rejected():
     data = valid_settings()
+    data["end_date"] = data["start_date"]
+    data["accommodations"] = []
     data["end_deadline"] = "09:59"
     with pytest.raises(ValidationError, match="end_deadline"):
         TripSettings(**data)
+
+
+def test_multi_day_return_clock_can_precede_first_day_arrival_clock():
+    data = valid_settings()
+    data["start_time"] = "10:00"
+    data["end_deadline"] = "09:00"
+    parsed = TripSettings(**data)
+    assert parsed.day_time_bounds() == [(600, 1439), (0, 540)]
 
 
 def test_closing_before_opening_is_rejected():
