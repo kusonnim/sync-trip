@@ -22,7 +22,6 @@ class Settings(BaseSettings):
     routing_cache_ttl_seconds: int = Field(default=1800, ge=1)
     routing_cache_max_entries: int = Field(default=512, ge=1)
     track2_candidates_per_objective: int = Field(default=3, ge=1, le=10)
-    car_cost_per_km_krw: int = Field(default=140, ge=0)
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

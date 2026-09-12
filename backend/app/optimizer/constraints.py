@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from app.models.optimize import Place, TripSettings, time_to_minutes
+from app.models.optimize import Location, Place, TripSettings, time_to_minutes
 from app.optimizer.estimator import estimate_leg
 
 
@@ -44,17 +44,24 @@ def resolve_visit_start(place: Place, arrival: int) -> int | None:
     return None
 
 
-def simulate_day(order: tuple[Place, ...], settings: TripSettings) -> SimulatedDay | None:
+def simulate_day(
+    order: tuple[Place, ...],
+    settings: TripSettings,
+    anchors: tuple[Location, Location] | None = None,
+) -> SimulatedDay | None:
+    """Walk one day in order. `anchors` is where that day begins and ends, which
+    is the accommodation on every day but the first and the last."""
+    origin, terminus = anchors if anchors else (settings.start_location, settings.end_location)
     mode = settings.transport_mode
     cursor = time_to_minutes(settings.start_time)
     deadline = time_to_minutes(settings.end_deadline)
-    previous = settings.start_location
+    previous = origin
     total_time = 0
     total_cost = 0
     timeline: list[dict] = [
         {
             "type": "place",
-            "name": settings.start_location.name,
+            "name": origin.name,
             "time": format_minutes(cursor),
         }
     ]
@@ -96,7 +103,7 @@ def simulate_day(order: tuple[Place, ...], settings: TripSettings) -> SimulatedD
         total_time += travel.minutes
         total_cost += travel.cost
 
-    final_travel = estimate_leg(previous, settings.end_location, mode)
+    final_travel = estimate_leg(previous, terminus, mode)
     finish = cursor + final_travel.minutes
     if finish > deadline:
         return None
@@ -113,7 +120,7 @@ def simulate_day(order: tuple[Place, ...], settings: TripSettings) -> SimulatedD
             },
             {
                 "type": "place",
-                "name": settings.end_location.name,
+                "name": terminus.name,
                 "time": format_minutes(finish),
             },
         ]

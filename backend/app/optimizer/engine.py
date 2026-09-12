@@ -4,6 +4,7 @@ from itertools import permutations
 from typing import Literal
 
 from app.models.optimize import (
+    Location,
     OptimizeErrorResponse,
     OptimizeRequest,
     OptimizeResponse,
@@ -34,6 +35,8 @@ class Track1Search:
     dates: list[date]
     buckets: list[list[Place]]
     per_day: list[list[SimulatedDay]]
+    # Where each day begins and ends, so a middle day runs between accommodations.
+    anchors: list[tuple[Location, Location]]
 
 
 def build_route_option(
@@ -83,13 +86,14 @@ def run_track1_search(request: OptimizeRequest) -> Track1Search | OptimizeErrorR
                 place_ids=list(conflict.place_ids),
             )
 
+    anchors = request.settings.day_anchors()
     per_day: list[list[SimulatedDay]] = []
-    for bucket in buckets:
+    for bucket, day_anchors in zip(buckets, anchors, strict=True):
         ordered_places = sorted(bucket, key=lambda place: place.place_id)
         candidates = [
             result
             for order in permutations(ordered_places)
-            if (result := simulate_day(order, request.settings)) is not None
+            if (result := simulate_day(order, request.settings, day_anchors)) is not None
         ]
         if not candidates:
             return OptimizeErrorResponse(
@@ -98,7 +102,7 @@ def run_track1_search(request: OptimizeRequest) -> Track1Search | OptimizeErrorR
             )
         per_day.append(candidates)
 
-    return Track1Search(dates=dates, buckets=buckets, per_day=per_day)
+    return Track1Search(dates=dates, buckets=buckets, per_day=per_day, anchors=anchors)
 
 
 def build_track1_response(search: Track1Search) -> OptimizeSuccessResponse:

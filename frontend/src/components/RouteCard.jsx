@@ -6,6 +6,15 @@ const TONE = {
   min_cost: { name: '최소 비용', tag: '알뜰', color: 'var(--accent)', tint: 'var(--accent-soft)' },
 };
 
+// Transit is a fare per leg; driving is only the toll, which is often nothing.
+function fareLabel(route) {
+  const driving = route.days.some((day) =>
+    day.timeline.some((item) => item.type === 'transit' && item.mode === 'car'),
+  );
+  if (!driving) return { label: '예상 요금', value: won(route.total_cost) };
+  return { label: '통행료', value: route.total_cost > 0 ? won(route.total_cost) : '없음' };
+}
+
 function countPlaces(route) {
   // Exclude the first and last entries because they are the start and end locations.
   return route.days.reduce(
@@ -17,6 +26,7 @@ function countPlaces(route) {
 export default function RouteCard({ route, open, onToggle, votes, onVote, myVote }) {
   const tone = TONE[route.type] ?? TONE.min_time;
   const picked = myVote === route.type;
+  const fare = fareLabel(route);
 
   return (
     <div className="card" style={{ gap: 14, borderColor: picked ? tone.color : 'var(--line)' }}>
@@ -34,8 +44,8 @@ export default function RouteCard({ route, open, onToggle, votes, onVote, myVote
           <span className="value">{durationText(route.total_time)}</span>
         </div>
         <div className="stat">
-          <span className="label">예상 요금</span>
-          <span className="value">{won(route.total_cost)}</span>
+          <span className="label">{fare.label}</span>
+          <span className="value">{fare.value}</span>
         </div>
         <div className="stat">
           <span className="label">장소</span>

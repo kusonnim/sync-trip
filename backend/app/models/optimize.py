@@ -60,6 +60,36 @@ class TripSettings(BaseModel):
     end_location: Location
     start_time: str
     end_deadline: str
+    # Where the group sleeps. One entry covers every night; more entries are used
+    # in order, one per night, so a trip can move between accommodations.
+    accommodations: list[Location] = Field(default_factory=list)
+
+    @property
+    def day_count(self) -> int:
+        return (self.end_date - self.start_date).days + 1
+
+    @property
+    def night_count(self) -> int:
+        return self.day_count - 1
+
+    def day_anchors(self) -> list[tuple[Location, Location]]:
+        """Where each day begins and ends.
+
+        The trip starts at ``start_location`` and finishes at ``end_location``.
+        Every night in between is spent at an accommodation, so a day ends where
+        the next one begins and no leg is invented between them.
+        """
+        nights = self.night_count
+        if nights == 0:
+            return [(self.start_location, self.end_location)]
+        stays = [
+            self.accommodations[min(night, len(self.accommodations) - 1)]
+            for night in range(nights)
+        ]
+        anchors = [(self.start_location, stays[0])]
+        anchors.extend((stays[night - 1], stays[night]) for night in range(1, nights))
+        anchors.append((stays[-1], self.end_location))
+        return anchors
 
     @model_validator(mode="after")
     def validate_settings(self) -> "TripSettings":
@@ -69,6 +99,15 @@ class TripSettings(BaseModel):
             raise ValueError("end_date must be on or after start_date")
         if deadline < start:
             raise ValueError("end_deadline must be at or after start_time")
+        nights = self.night_count
+        if nights == 0 and self.accommodations:
+            raise ValueError("a single-day trip has no night to accommodate")
+        if nights > 0 and not self.accommodations:
+            raise ValueError("a multi-day trip needs at least one accommodation")
+        if len(self.accommodations) > nights:
+            raise ValueError(
+                f"a {self.day_count}-day trip has {nights} night(s) to accommodate"
+            )
         return self
 
 

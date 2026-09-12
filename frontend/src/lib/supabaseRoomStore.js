@@ -37,6 +37,7 @@ export class SupabaseRoomAdapter {
           p_daily_start: meta.dailyStart, p_daily_end: meta.dailyEnd,
           p_headcount: meta.headcount, p_transport_mode: meta.transportMode,
           p_origin: meta.origin, p_destination: meta.destination,
+          p_accommodations: meta.accommodations ?? [],
         }, 'The room could not be created. Check the connection and try again.');
         rememberHost(code, token);
         setMemberId(code, hostId);
@@ -139,7 +140,7 @@ export class SupabaseRoomAdapter {
 
   async updatePlace(code, placeId, patch) {
     const updated = await this.call('patch_room_place', {
-      p_room_code: normalizeRoomCode(code), p_host_token: getHostToken(code) ?? '',
+      p_room_code: normalizeRoomCode(code), p_member_id: getMemberId(code) ?? '',
       p_place_id: placeId, p_patch: patch,
     }, 'Could not update that place.');
     if (!updated) throw new Error('Place not found.');
@@ -147,7 +148,7 @@ export class SupabaseRoomAdapter {
 
   async removePlace(code, placeId) {
     await this.call('remove_room_place', {
-      p_room_code: normalizeRoomCode(code), p_host_token: getHostToken(code) ?? '', p_place_id: placeId,
+      p_room_code: normalizeRoomCode(code), p_member_id: getMemberId(code) ?? '', p_place_id: placeId,
     }, 'Could not remove that place.');
   }
 

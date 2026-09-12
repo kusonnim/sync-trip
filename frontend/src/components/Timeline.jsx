@@ -40,7 +40,10 @@ export default function Timeline({ timeline }) {
                 </>
               ) : (
                 <div className="tl-leg">
-                  {item.instruction} · {won(item.cost)} · {durationText(item.duration)}
+                  {item.instruction}
+                  {item.cost > 0 ? ` · ${won(item.cost)}` : ''}
+                  {' · '}
+                  {durationText(item.duration)}
                 </div>
               )}
             </div>

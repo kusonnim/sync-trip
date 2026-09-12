@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
+  DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useSensor,
@@ -67,10 +68,13 @@ export default function PlacePicker({ room, me, isHost }) {
   }, [room.places]);
 
   const sensors = useSensors(
-    // A small movement threshold keeps taps on the row buttons working.
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    // A short press before dragging leaves normal touch scrolling intact.
-    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 6 } }),
+    // Mouse only. A pointer sensor would also claim touch, and it needs
+    // touch-action: none to receive moves, which would stop the list scrolling.
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    // Touch goes through a press-and-hold instead. The hold is what tells the
+    // browser this gesture is a drag and not a scroll, and the generous tolerance
+    // forgives the small drift of a finger held still.
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 12 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -112,10 +116,10 @@ export default function PlacePicker({ room, me, isHost }) {
     fetchPlaceHours(place.name)
       .then((hours) => {
         if (hours) return updatePlace(room.code, place.id, { ...hours, hoursSource: 'google' });
-        setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 대표자가 직접 수정할 수 있습니다.');
+        setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 시간 버튼에서 직접 고칠 수 있습니다.');
         return null;
       })
-      .catch(() => setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 대표자가 직접 수정할 수 있습니다.'));
+      .catch(() => setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 시간 버튼에서 직접 고칠 수 있습니다.'));
   }
 
   async function submit() {
@@ -189,6 +193,10 @@ export default function PlacePicker({ room, me, isHost }) {
     () => Object.fromEntries(room.places.map((p) => [p.id, p])),
     [room.places],
   );
+  // Without an overlay the only feedback is the row fading in place, which reads
+  // as a failed press on a phone. The overlay follows the finger instead.
+  const [dragging, setDragging] = useState(null);
+  const draggingPlace = dragging ? placeById[dragging] : null;
   const pool = lists.pool.map((id) => placeById[id]).filter(Boolean);
   const toggleEditor = (id) => setEditing(editing === id ? null : id);
 
@@ -250,8 +258,10 @@ export default function PlacePicker({ room, me, isHost }) {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={({ active }) => setDragging(active.id)}
+        onDragCancel={() => setDragging(null)}
         onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
+        onDragEnd={(event) => { setDragging(null); handleDragEnd(event); }}
       >
         <div className="card">
           <div className="card-head">
@@ -279,15 +289,14 @@ export default function PlacePicker({ room, me, isHost }) {
                   actions={
                     <>
                       <span className="rank-label">{index + 1}순위</span>
-                      {isHost && (
-                        <button className="pill" aria-expanded={editing === id} onClick={() => toggleEditor(id)}>
-                          시간
-                        </button>
-                      )}
+                      <button className="pill" aria-expanded={editing === id} onClick={() => toggleEditor(id)}>
+                        시간
+                      </button>
+                      <button className="pill" onClick={() => discard(id)}>삭제</button>
                     </>
                   }
                   expanded={
-                    isHost && editing === id ? (
+                    editing === id ? (
                       <PlaceTimeEditor
                         key={id}
                         code={room.code}
@@ -323,17 +332,15 @@ export default function PlacePicker({ room, me, isHost }) {
                 name={place.name}
                 meta={`${metaText(place)} · ${durationText(place.minStay ?? 60)} 체류`}
                 actions={
-                  isHost && (
-                    <>
-                      <button className="pill" aria-expanded={editing === place.id} onClick={() => toggleEditor(place.id)}>
-                        시간
-                      </button>
-                      <button className="pill" onClick={() => discard(place.id)}>삭제</button>
-                    </>
-                  )
+                  <>
+                    <button className="pill" aria-expanded={editing === place.id} onClick={() => toggleEditor(place.id)}>
+                      시간
+                    </button>
+                    <button className="pill" onClick={() => discard(place.id)}>삭제</button>
+                  </>
                 }
                 expanded={
-                  isHost && editing === place.id ? (
+                  editing === place.id ? (
                     <PlaceTimeEditor
                       key={place.id}
                       code={room.code}
@@ -349,6 +356,20 @@ export default function PlacePicker({ room, me, isHost }) {
             <div className="notice error">순위는 {TOP_N}곳까지예요. 먼저 한 곳을 아래로 내려 주세요.</div>
           )}
         </div>
+
+        <DragOverlay>
+          {draggingPlace && (
+            <div className="item draggable dragging-overlay">
+              <div className="item-main">
+                <span className="rank-dot empty" aria-hidden="true">⠿</span>
+                <div className="grow">
+                  <div className="name">{draggingPlace.name}</div>
+                  <div className="meta">{metaText(draggingPlace)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </DragOverlay>
       </DndContext>
 
     </Screen>

@@ -34,9 +34,12 @@ export default function RoomLobby({ room, isHost }) {
     }
   }
 
+  // A trip of one has nobody to wait for, so the screen stops asking it to.
+  const solo = room.headcount <= 1 && room.members.length <= 1;
+
   return (
     <Screen
-      title="팀원을 기다리는 중"
+      title={solo ? '혼자 떠나는 여행' : '팀원을 기다리는 중'}
       subtitle={room.title}
       back={{ label: '처음', onClick: () => navigate('/') }}
       footer={
@@ -48,9 +51,9 @@ export default function RoomLobby({ room, isHost }) {
           >
             {starting
               ? '시작하는 중...'
-              : room.members.length < room.headcount
-              ? `${room.members.length}명으로 먼저 시작하기`
-              : '희망지 입력 시작하기'}
+              : solo || room.members.length >= room.headcount
+              ? '희망지 입력 시작하기'
+              : `${room.members.length}명으로 먼저 시작하기`}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
@@ -65,6 +68,7 @@ export default function RoomLobby({ room, isHost }) {
         <button className="btn-ghost" style={{ width: '100%' }} onClick={copy}>
           🔗 초대 링크 복사
         </button>
+        {solo && <div className="hint">나중에 누가 합류해도 이 링크로 들어올 수 있어요.</div>}
         {copied && (
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--good)' }}>링크를 복사했어요</div>
         )}
@@ -86,7 +90,7 @@ export default function RoomLobby({ room, isHost }) {
       <div className="card" style={{ gap: 10 }}>
         <div className="card-title">이렇게 진행됩니다</div>
         <p className="muted" style={{ lineHeight: 1.7 }}>
-          1. 각자 가고 싶은 곳을 담고 그중 {TOP_N}곳에 순위를 매깁니다.<br />
+          1. {solo ? '가고 싶은 곳을 담고' : '각자 가고 싶은 곳을 담고'} 그중 {TOP_N}곳에 순위를 매깁니다.<br />
           2. 1순위 3점, 2순위 2점, 3순위 1점으로 합산합니다.<br />
           3. 점수가 높은 {SLOTS_PER_DAY * dayCount}곳만 남겨 두 가지 경로를 만들고, 투표로 하나를 확정합니다.
         </p>
