@@ -1,9 +1,9 @@
-// 개인별 순위를 팀 선호 점수로 합산한다. PRD 1절 규칙과 같다.
+// Combine individual rankings into a group preference score using the PRD section 1 rules.
 //
-//   하루 방문 가능 장소 = 4
-//   총 슬롯 S = 4 * 여행일수
-//   1인당 입력 개수 k = clamp(ceil(S * 1.5 / 인원수), 3, 10)
-//   순위 r 의 가중치 = k - r + 1  (Borda)
+//   Places per day = 4
+//   Total slots S = 4 * trip days
+//   Picks per person k = clamp(ceil(S * 1.5 / headcount), 3, 10)
+//   Rank r weight = k - r + 1 (Borda)
 
 export const SLOTS_PER_DAY = 4;
 
@@ -24,7 +24,7 @@ export function scorePlaces(places, preferences, k) {
   return places.map((p) => ({ ...p, score: score.get(p.id) ?? 0 }));
 }
 
-/** 고정 여행지는 무조건 넣고, 나머지 슬롯을 점수 상위순으로 채운다. */
+/** Always include required places, then fill remaining slots by descending score. */
 export function pickCandidates(scored, dayCount) {
   const slots = SLOTS_PER_DAY * dayCount;
   const fixed = scored.filter((p) => p.isFixed);

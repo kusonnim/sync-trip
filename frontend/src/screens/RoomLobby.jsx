@@ -23,7 +23,7 @@ export default function RoomLobby({ room, isHost }) {
   return (
     <Screen
       step={3}
-      title="팀원을 기다리는 중"
+      title="Waiting for Members"
       subtitle={room.title}
       footer={
         isHost ? (
@@ -32,26 +32,26 @@ export default function RoomLobby({ room, isHost }) {
             disabled={room.members.length < 2}
             onClick={() => patchRoom(room.code, { status: 'collecting' })}
           >
-            {room.members.length < 2 ? '팀원이 1명 더 필요해요' : '희망지 입력 시작하기'}
+            {room.members.length < 2 ? 'Waiting for One More Member' : 'Start Adding Place Preferences'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
-            대표자가 시작하기를 누르면 넘어갑니다
+            The host will start the next step
           </button>
         )
       }
     >
       <div className="card pad-lg center">
-        <div className="tl-note">방 코드</div>
+        <div className="tl-note">Room Code</div>
         <div className="roomcode">{room.code}</div>
         <button className="btn-ghost" style={{ width: '100%' }} onClick={copy}>
-          {copied ? '링크를 복사했어요' : '🔗 초대 링크 복사'}
+          {copied ? 'Link Copied' : '🔗 Copy Invitation Link'}
         </button>
       </div>
 
       <div className="card">
         <div className="card-title">
-          참여자 {room.members.length}명 / {room.headcount}명
+          Members: {room.members.length} / {room.headcount}
         </div>
         <div className="chips">
           {room.members.map((m) => (
@@ -61,11 +61,11 @@ export default function RoomLobby({ room, isHost }) {
       </div>
 
       <div className="card">
-        <div className="card-title">이렇게 진행됩니다</div>
+        <div className="card-title">How It Works</div>
         <p className="muted" style={{ margin: 0 }}>
-          모두 모이면 각자 가고 싶은 곳을 <strong>{k}곳</strong>까지 순위로 고릅니다.
-          {' '}{dayCount}일 일정에 {room.headcount}명이라 이 개수로 정해졌습니다.
-          순위를 모으면 선호 점수가 높은 곳만 남기고 최소 시간과 최소 비용 두 가지 일정을 만들어 드립니다.
+          Once everyone joins, each member ranks up to <strong>{k} places</strong>.
+          {' '}That limit is based on a {dayCount}-day trip for {room.headcount} travelers.
+          We combine the rankings, keep the highest-scoring places, and build a fastest route and a lowest-cost route.
         </p>
       </div>
     </Screen>

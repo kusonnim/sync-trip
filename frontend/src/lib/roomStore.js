@@ -1,7 +1,7 @@
-// 방 상태 저장소. 지금은 localStorage 로 동작하고 같은 브라우저의 다른 탭끼리 동기화된다.
-// 백엔드 담당이 Firestore 를 붙일 때 이 파일의 함수 본문만 교체하면 화면 코드는 그대로 둔다.
+// Room state store. It currently uses localStorage and synchronizes tabs in the same browser.
+// When Firestore is connected, replace only these function bodies and leave the screen code unchanged.
 //
-// Firestore 로 옮길 때 대응 관계
+// Firestore migration mapping
 //   readRoom  -> getDoc(doc(db, 'rooms', code))
 //   subscribe -> onSnapshot(doc(db, 'rooms', code))
 //   patchRoom -> updateDoc(...)

@@ -36,7 +36,7 @@ body {
   padding: 0 20px 96px;
 }
 
-/* 헤더 */
+/* Header */
 .topbar {
   display: flex;
   align-items: center;
@@ -55,7 +55,7 @@ body {
   margin-left: auto;
 }
 
-/* 카드 */
+/* Cards */
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -67,7 +67,7 @@ body {
 .card.pad-lg { padding: 20px; }
 .card-title { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
 
-/* 폼 */
+/* Forms */
 label.field { display: block; margin-bottom: 14px; }
 label.field > span {
   display: block;
@@ -94,7 +94,7 @@ input:focus, select:focus, textarea:focus {
 .row { display: flex; gap: 10px; }
 .row > * { flex: 1; min-width: 0; }
 
-/* 버튼 */
+/* Buttons */
 button {
   font: inherit;
   font-weight: 700;
@@ -111,7 +111,7 @@ button:not(:disabled):active { filter: brightness(.95); }
 .btn-ghost { background: #fff; color: var(--ink); border-color: var(--line); }
 .btn-sm { padding: 8px 12px; font-size: 13px; border-radius: 10px; }
 
-/* 하단 고정 바 */
+/* Fixed bottom bar */
 .bottom-bar {
   position: fixed;
   left: 50%;
@@ -123,7 +123,7 @@ button:not(:disabled):active { filter: brightness(.95); }
   background: linear-gradient(to top, var(--bg) 70%, transparent);
 }
 
-/* 선택 토글 */
+/* Choice toggle */
 .choice-group { display: flex; gap: 8px; }
 .choice {
   flex: 1;
@@ -139,7 +139,7 @@ button:not(:disabled):active { filter: brightness(.95); }
   color: var(--brand);
 }
 
-/* 목록 */
+/* Lists */
 .list { display: flex; flex-direction: column; gap: 8px; }
 .item {
   display: flex;
@@ -166,7 +166,7 @@ button:not(:disabled):active { filter: brightness(.95); }
 }
 .rank-dot.empty { background: #eef0f6; color: var(--ink-faint); }
 
-/* 칩 */
+/* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 12px;
@@ -179,7 +179,7 @@ button:not(:disabled):active { filter: brightness(.95); }
 .chip.gray { background: #eef0f6; color: var(--ink-soft); }
 .chip.accent { background: var(--accent-soft); color: var(--accent); }
 
-/* 방 코드 */
+/* Room code */
 .roomcode {
   font-size: 34px;
   font-weight: 800;
@@ -189,7 +189,7 @@ button:not(:disabled):active { filter: brightness(.95); }
   margin: 4px 0 14px;
 }
 
-/* 타임라인 */
+/* Timeline */
 .timeline { position: relative; padding-left: 22px; }
 .timeline::before {
   content: "";
@@ -221,7 +221,7 @@ button:not(:disabled):active { filter: brightness(.95); }
   margin: 8px 0 0;
 }
 
-/* 경고 */
+/* Notices */
 .notice {
   border-radius: 12px;
   padding: 14px;
@@ -232,7 +232,7 @@ button:not(:disabled):active { filter: brightness(.95); }
 .notice.error { background: var(--accent-soft); color: #b7392c; }
 .notice.warn { background: #fff6e8; color: #8a5a12; }
 
-/* 진행 표시 */
+/* Progress indicator */
 .progress-step {
   display: flex;
   align-items: center;

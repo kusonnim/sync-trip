@@ -183,7 +183,7 @@ travel day, and each day holds the alternating place / transit timeline.
   "routes": [
     {
       "type": "min_time",
-      "label": "최소 시간",
+      "label": "Fastest Route",
       "total_time": 240,
       "total_cost": 8600,
       "days": [
@@ -201,7 +201,7 @@ travel day, and each day holds the alternating place / transit timeline.
     },
     {
       "type": "min_cost",
-      "label": "최소 비용",
+      "label": "Lowest-Cost Route",
       "total_time": 265,
       "total_cost": 7200,
       "days": []

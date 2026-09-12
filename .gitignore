@@ -1,4 +1,4 @@
-# 환경변수
+# Environment variables
 .env
 .env.*
 !.env.example
@@ -15,10 +15,10 @@ node_modules/
 dist/
 .vite/
 
-# 배포
+# Deployment
 .vercel/
 
-# OS / 에디터
+# OS / editors
 .DS_Store
 Thumbs.db
 .idea/

@@ -1,8 +1,8 @@
 import { durationText, won } from '../lib/time';
 import { categoryLabel } from '../lib/categories';
 
-// PROJECT.md ③ 응답의 timeline 배열을 그대로 그린다.
-// place 와 transit 이 번갈아 들어오고, 첫 항목과 마지막 항목은 출발지와 도착지다.
+// Render the timeline array from the PROJECT.md section 3 response as-is.
+// Place and transit entries alternate; the first and last entries are the start and end locations.
 export default function Timeline({ timeline }) {
   return (
     <div className="timeline">
@@ -18,9 +18,9 @@ export default function Timeline({ timeline }) {
             <div className="tl-name">{item.name}</div>
             {item.stay_duration != null && (
               <div className="tl-note">
-                {categoryLabel(item.category)} · {durationText(item.stay_duration)} 머무름
-                {item.hard_constraint ? ` · ${item.hard_constraint.start} 예약` : ''}
-                {item.wait_duration > 5 ? ` · 대기 ${item.wait_duration}분` : ''}
+                {categoryLabel(item.category)} · Stay for {durationText(item.stay_duration)}
+                {item.hard_constraint ? ` · ${item.hard_constraint.start} reservation` : ''}
+                {item.wait_duration > 5 ? ` · Wait ${item.wait_duration} min` : ''}
               </div>
             )}
           </div>

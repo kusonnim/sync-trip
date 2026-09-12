@@ -8,8 +8,8 @@ import Analyzing from './Analyzing';
 import Result from './Result';
 import { subscribe, getMyId, setMyId } from '../lib/roomStore';
 
-// 방 하나를 status 에 따라 알맞은 화면으로 넘긴다.
-// 모두가 같은 status 를 구독하므로 대표자가 단계를 넘기면 전원 화면이 같이 바뀐다.
+// Route a room to the correct screen for its status.
+// Everyone subscribes to the same status, so the host advances every member's screen together.
 export default function Room() {
   const { code } = useParams();
   const [room, setRoom] = useState(null);
@@ -19,8 +19,8 @@ export default function Room() {
 
   if (!room) {
     return (
-      <Screen title="방을 찾을 수 없어요">
-        <p className="muted">코드가 맞는지 확인해 주세요. 이 브라우저에서 만든 방만 열 수 있습니다.</p>
+      <Screen title="Room Not Found">
+        <p className="muted">Check the code. Only rooms created in this browser are available.</p>
       </Screen>
     );
   }
