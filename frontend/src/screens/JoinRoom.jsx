@@ -4,6 +4,20 @@ import { joinRoom } from '../lib/roomStore';
 
 export default function JoinRoom({ room, onJoined }) {
   const [nickname, setNickname] = useState('');
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState('');
+
+  async function join() {
+    setJoining(true);
+    setError('');
+    try {
+      onJoined(await joinRoom(room.code, nickname.trim()));
+    } catch {
+      setError('방에 참여하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+    } finally {
+      setJoining(false);
+    }
+  }
   return (
     <Screen
       title={room.title}
@@ -11,10 +25,10 @@ export default function JoinRoom({ room, onJoined }) {
       footer={
         <button
           className="btn-accent"
-          disabled={!nickname.trim()}
-          onClick={() => onJoined(joinRoom(room.code, nickname.trim()))}
+          disabled={!nickname.trim() || joining}
+          onClick={join}
         >
-          참여하기
+          {joining ? '참여하는 중...' : '참여하기'}
         </button>
       }
     >
@@ -24,6 +38,7 @@ export default function JoinRoom({ room, onJoined }) {
           <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="예: 지호" />
         </label>
         <p className="hint">로그인은 필요 없습니다. 팀원들에게 보일 이름만 정해 주세요.</p>
+        {error && <p className="hint" style={{ color: 'var(--accent)' }}>{error}</p>}
       </div>
 
       <div className="card">

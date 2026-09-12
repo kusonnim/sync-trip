@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { updatePlace } from '../lib/roomStore';
 import { CATEGORY_DEFAULTS, categoryLabel } from '../lib/categories';
 
@@ -9,10 +10,21 @@ const SOURCE_LABEL = {
 
 // One editor serves both lists, so a ranked place can be edited too.
 export default function PlaceTimeEditor({ code, place, onClose }) {
+  const [error, setError] = useState('');
+  const [draft, setDraft] = useState({});
   if (!place) return null;
 
-  const set = (patch) => updatePlace(code, place.id, patch);
-  const window = place.visitWindow ?? null;
+  const set = async (patch) => {
+    setError('');
+    setDraft((current) => ({ ...current, ...patch }));
+    try { await updatePlace(code, place.id, patch); }
+    catch {
+      setDraft({});
+      setError('시간 설정을 저장하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+    }
+  };
+  const currentPlace = { ...place, ...draft };
+  const window = currentPlace.visitWindow ?? null;
 
   // A start alone means that exact time. A start and an end mean anytime in between.
   function setWindow(key, value) {
@@ -39,15 +51,16 @@ export default function PlaceTimeEditor({ code, place, onClose }) {
       </div>
 
       <div className="notice warn">
-        {SOURCE_LABEL[place.hoursSource] ?? SOURCE_LABEL.default} ({categoryLabel(place.category)})
+        {SOURCE_LABEL[currentPlace.hoursSource] ?? SOURCE_LABEL.default} ({categoryLabel(currentPlace.category)})
       </div>
+      {error && <div className="notice error">{error}</div>}
 
       <div className="grid-2">
         <label className="field">
           <span>여는 시각</span>
           <input
             type="time"
-            value={place.openTime ?? ''}
+            value={currentPlace.openTime ?? ''}
             onChange={(e) => set({ openTime: e.target.value, hoursSource: 'manual' })}
           />
         </label>
@@ -55,7 +68,7 @@ export default function PlaceTimeEditor({ code, place, onClose }) {
           <span>닫는 시각</span>
           <input
             type="time"
-            value={place.closeTime ?? ''}
+            value={currentPlace.closeTime ?? ''}
             onChange={(e) => set({ closeTime: e.target.value, hoursSource: 'manual' })}
           />
         </label>
@@ -80,7 +93,7 @@ export default function PlaceTimeEditor({ code, place, onClose }) {
           type="number"
           step={10}
           min={10}
-          value={place.minStay ?? 60}
+          value={currentPlace.minStay ?? 60}
           onChange={(e) => set({ minStay: Math.max(10, Number(e.target.value) || 10) })}
         />
       </label>
@@ -88,15 +101,15 @@ export default function PlaceTimeEditor({ code, place, onClose }) {
       <div className="stack-8">
         <button
           className="choice"
-          aria-pressed={!!place.isFixed}
+          aria-pressed={!!currentPlace.isFixed}
           style={{ textAlign: 'left' }}
-          onClick={() => set({ isFixed: !place.isFixed })}
+          onClick={() => set({ isFixed: !currentPlace.isFixed })}
         >
-          {place.isFixed ? '✓ 필수로 방문하기' : '필수로 방문하기'}
+          {currentPlace.isFixed ? '✓ 필수로 방문하기' : '필수로 방문하기'}
         </button>
-        {(place.hoursSource === 'manual' || window) && (
+        {(currentPlace.hoursSource === 'manual' || window) && (
           <div className="item-actions">
-            {place.hoursSource === 'manual' && (
+            {currentPlace.hoursSource === 'manual' && (
               <button className="pill" onClick={resetHours}>기본 영업시간으로</button>
             )}
             {window && (

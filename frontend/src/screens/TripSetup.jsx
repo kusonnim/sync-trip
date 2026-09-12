@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen';
 import { createRoom } from '../lib/roomStore';
+import { searchPlaces } from '../lib/api';
 import { daysBetween } from '../lib/time';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -20,27 +21,42 @@ export default function TripSetup() {
     originName: '서울역',
     destinationName: '서울역',
   });
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const dayCount = daysBetween(form.startDate, form.endDate);
   const ready = form.hostNickname.trim() && form.endDate >= form.startDate;
 
-  function submit() {
-    // Origin and destination coordinates become real values once Kakao Local search is wired up.
-    const room = createRoom({
-      ...form,
-      headcount: Number(form.headcount),
-      origin: { name: form.originName, lat: 37.5547, lng: 126.9707 },
-      destination: { name: form.destinationName, lat: 37.5547, lng: 126.9707 },
-    });
-    navigate(`/r/${room.code}`);
+  async function submit() {
+    setCreating(true);
+    setError('');
+    try {
+      const originLookup = searchPlaces(form.originName);
+      const destinationLookup = form.destinationName === form.originName ? originLookup : searchPlaces(form.destinationName);
+      const [originMatches, destinationMatches] = await Promise.all([originLookup, destinationLookup]);
+      if (!originMatches[0] || !destinationMatches[0]) {
+        throw new Error('출발지나 도착지를 찾지 못했습니다. 더 구체적인 장소 이름을 입력해 주세요.');
+      }
+      const room = await createRoom({
+        ...form,
+        headcount: Number(form.headcount),
+        origin: { name: originMatches[0].name, lat: originMatches[0].lat, lng: originMatches[0].lng },
+        destination: { name: destinationMatches[0].name, lat: destinationMatches[0].lat, lng: destinationMatches[0].lng },
+      });
+      navigate(`/r/${room.code}`);
+    } catch (reason) {
+      setError(reason?.message || '여행방을 만들지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
     <Screen
       title="여행 기본정보"
       subtitle="대표자가 먼저 입력합니다"
-      footer={<button className="btn-primary" disabled={!ready} onClick={submit}>여행방 만들기</button>}
+      footer={<button className="btn-primary" disabled={!ready || creating} onClick={submit}>{creating ? '여행방 만드는 중...' : '여행방 만들기'}</button>}
     >
       <div className="card" style={{ gap: 14 }}>
         <label className="field">
@@ -52,6 +68,7 @@ export default function TripSetup() {
           <input value={form.title} onChange={set('title')} />
         </label>
       </div>
+      {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
       <div className="card" style={{ gap: 14 }}>
         <div className="card-title">날짜와 시간</div>

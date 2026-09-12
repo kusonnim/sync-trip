@@ -6,6 +6,8 @@ import { daysBetween } from '../lib/time';
 
 export default function RoomLobby({ room, isHost }) {
   const [copied, setCopied] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState('');
   const link = `${window.location.origin}/r/${room.code}`;
   const dayCount = daysBetween(room.startDate, room.endDate);
 
@@ -19,14 +21,31 @@ export default function RoomLobby({ room, isHost }) {
     }
   }
 
+  async function start() {
+    setStarting(true);
+    setError('');
+    try {
+      await patchRoom(room.code, { status: 'collecting' });
+    } catch {
+      setError('방을 다음 단계로 넘기지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+      setStarting(false);
+    }
+  }
+
   return (
     <Screen
       title="팀원을 기다리는 중"
       subtitle={room.title}
       footer={
         isHost ? (
-          <button className="btn-primary" onClick={() => patchRoom(room.code, { status: 'collecting' })}>
-            {room.members.length < room.headcount
+          <button
+            className="btn-primary"
+            disabled={starting}
+            onClick={start}
+          >
+            {starting
+              ? '시작하는 중...'
+              : room.members.length < room.headcount
               ? `${room.members.length}명으로 먼저 시작하기`
               : '희망지 입력 시작하기'}
           </button>
@@ -59,6 +78,7 @@ export default function RoomLobby({ room, isHost }) {
           ))}
         </div>
       </div>
+      {error && <p className="tl-note" style={{ color: 'var(--accent)' }}>{error}</p>}
 
       <div className="card" style={{ gap: 10 }}>
         <div className="card-title">이렇게 진행됩니다</div>

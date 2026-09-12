@@ -13,15 +13,25 @@ import { subscribe, getMyId, setMyId } from '../lib/roomStore';
 export default function Room() {
   const { code } = useParams();
   const [room, setRoom] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [syncError, setSyncError] = useState('');
   const [myId, setMyIdState] = useState(() => getMyId(code));
 
-  useEffect(() => subscribe(code, setRoom), [code]);
+  useEffect(() => subscribe(code, (next) => { setRoom(next); setLoaded(true); setSyncError(''); }, () => { setLoaded(true); setSyncError('방을 동기화할 수 없습니다. 연결을 확인해 주세요.'); }), [code]);
+
+  if (!loaded) {
+    return <Screen title="방 불러오는 중"><p className="muted">공유 방에 연결하고 있습니다...</p></Screen>;
+  }
+
+  if (syncError) {
+    return <Screen title="연결할 수 없어요"><p className="muted">{syncError}</p></Screen>;
+  }
 
   if (!room) {
     return (
       <Screen title="방을 찾을 수 없어요" subtitle="코드를 다시 확인해 주세요">
         <div className="card">
-          <p className="muted">이 브라우저에서 만들거나 참여한 방만 열 수 있습니다.</p>
+          <p className="muted">방 코드와 초대 링크를 확인한 뒤 다시 시도해 주세요.</p>
         </div>
       </Screen>
     );

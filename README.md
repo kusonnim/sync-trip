@@ -1,71 +1,103 @@
 # SyncTrip
 
-A social, group-voting travel route optimizer with time-window constraints.
+SyncTrip is a multi-user travel planner that combines ranked group preferences with business hours and reservation constraints. It produces fastest and lowest-cost itineraries, then lets the group vote on the final route.
 
-Each traveler ranks the places they want to visit. SyncTrip combines those preferences, narrows the candidates, and creates two day-by-day itineraries—a fastest route and a lowest-cost route—that respect business hours and reservation times. The group then votes on the final plan.
+## Architecture
 
-## Current Status
+```text
+Browser (React + Vite)
+  ├─ Supabase
+  │    ├─ PostgreSQL: collaborative room state
+  │    ├─ Realtime: room-scoped change notifications
+  │    └─ RLS + narrow RPCs: read policy and write invariants
+  └─ FastAPI
+       ├─ Kakao Local and Google Places
+       ├─ Track 1 bounded exhaustive optimization
+       └─ Kakao Mobility or ODsay Track 2 refinement
+```
 
-The frontend supports the full ten-step flow without a backend. The backend has not been implemented yet.
+Rooms progress through `setup → collecting → analyzing → voting → confirmed`. Relational tables persist members, places, rankings, routes, errors, and one vote per member. The host acquires an atomic PostgreSQL optimization lock, calls FastAPI with one coherent room snapshot, and completes the run through a nonce-protected RPC.
 
-| Area | Status |
-|---|---|
-| Ten-step frontend flow | Complete |
-| Optimization engine | Temporary frontend implementation; all 14 constraint checks pass |
-| Real-time room-state synchronization | Uses localStorage and synchronizes tabs in the same browser |
-| Firestore | Not connected |
-| FastAPI backend | Not implemented |
-| Live Kakao, ODsay, and Google APIs | Not connected; uses mock data and distance-based estimates |
-| Map and result-image export | Not implemented |
+The Korean mobile UI separates unlimited place suggestions from each member's top-three ranking. Hosts can edit business hours, required stops, stay duration, and scheduled visit windows before the group compares and votes on the generated routes.
+
+## Supabase Setup
+
+1. Create a Supabase project and copy its project URL and publishable key from the Connect dialog.
+2. Install the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), authenticate, and apply the versioned migration:
+
+   ```bash
+   supabase link
+   supabase db push
+   ```
+
+3. Copy `frontend/.env.example` to `frontend/.env` and set:
+
+   ```dotenv
+   VITE_SYNC_MODE=supabase
+   VITE_API_MODE=backend
+   VITE_API_BASE=https://api.example.com
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   ```
+
+Never put a secret or service-role key in a `VITE_` variable. The migration enables RLS and Realtime publication for every collaborative table.
 
 ## Run Locally
+
+For a local demo without external persistence, use explicit mock modes:
+
+```dotenv
+VITE_SYNC_MODE=mock
+VITE_API_MODE=mock
+```
+
+Frontend:
 
 ```bash
 cd frontend
 npm install
-npm run dev     # Development server
-npm run check   # Run 14 optimization constraint checks
-npm run build   # Production build
+npm run dev
+npm run check
+npm run test:integration
+npm run build
+npm run lint
 ```
+
+Backend:
+
+```bash
+cd backend
+python -m pip install -r requirements.txt
+copy .env.example .env
+uvicorn app.main:app --reload
+pytest
+```
+
+Provider keys and CORS configuration belong only in `backend/.env`. The backend can start and serve `/health` without provider credentials.
+
+## Deployment
+
+- Vercel: deploy `frontend/`; `vercel.json` handles direct SPA refreshes.
+- Supabase: link the production project and run `supabase db push` before the frontend rollout.
+- Render: use `render.yaml` or build `backend/Dockerfile`. Configure `CORS_ORIGINS=https://<frontend-domain>,http://localhost:5173`.
+
+No project IDs, deployment credentials, or secrets are committed.
+
+## Accountless Security Boundary
+
+The MVP intentionally has no accounts or Supabase Auth. A random browser-local member ID is stable but forgeable, and display names are metadata only. The host token is kept in browser storage; PostgreSQL stores only its SHA-256 digest and requires it for host state changes and optimization writes.
+
+RLS is enabled on all client-visible tables. Browser roles receive read-only table access for Realtime, while all mutations use narrowly scoped, schema-qualified RPCs with constraints and fixed `search_path`. This protects database invariants and keeps the host proof out of Realtime payloads, but it cannot prove which human owns a member ID. Accountless Realtime also means table rows readable to the publishable-key role are not private merely because the UI asks for a room code. Use Supabase Auth or a trusted persistence backend before storing sensitive trip information.
+
+Anonymous room creation and member RPCs can also be automated by anyone holding the publishable key. Apply project-level rate limits or abuse controls for a public deployment; authentication is required for durable per-user authorization.
 
 ## Documentation
 
-| File | Description |
-|---|---|
-| [PROJECT.md](PROJECT.md) | Canonical team contract for the API and optimization algorithm |
-| [docs/PRD.md](docs/PRD.md) | Product requirements, flow, data model, implementation order, and validation |
-| [frontend/README.md](frontend/README.md) | Frontend architecture and backend integration points |
-| [docs/reference/planning-document.txt](docs/reference/planning-document.txt) | Original planning document |
-| [docs/reference/input-output-notes.jpg](docs/reference/input-output-notes.jpg) | Handwritten input/output notes |
-| [docs/reference/user-flow.png](docs/reference/user-flow.png) | Ten-step user flow |
+- [PROJECT.md](PROJECT.md): canonical API, relational state, and optimizer contract
+- [docs/PRD.md](docs/PRD.md): product flow and final MVP behavior
+- [frontend/README.md](frontend/README.md): runtime modes, room store, Realtime, and testing
+- [backend/README.md](backend/README.md): API, providers, configuration, and deployment
 
-## Stack
+## Remaining MVP Limitations
 
-- Frontend: React + Vite, deployed with Vercel
-- Real-time synchronization: Firebase Firestore (planned)
-- Backend: Python FastAPI (planned)
-- External APIs: Kakao Local for place search, Kakao Mobility for driving, ODsay for public transit, and Google Places for business hours
-
-## Structure
-
-```text
-frontend/           React application (implemented)
-  src/screens/      One file per screen
-  src/components/   Timeline, route card, and conflict notice
-  src/lib/          Optimizer, room store, and API client
-  scripts/          Constraint-check scripts
-backend/            FastAPI server and optimizer (not implemented)
-docs/               PRD and original reference material
-```
-
-## Backend Integration Order
-
-The frontend already sends and receives data according to the contract in PROJECT.md section 4. Only two integration points need to change when the backend is ready:
-
-1. Set `VITE_API_BASE` in `frontend/.env` to disable the temporary engine and call the backend.
-2. Replace the function bodies in `frontend/src/lib/roomStore.js` with Firestore calls. The screen components do not need to change.
-
-## Key Management
-
-Keep every external API key in backend environment variables. Only Firebase web configuration belongs in the frontend.
-Never put an external API key in a Vite variable with the `VITE_` prefix because Vite embeds those values in the production bundle.
+There are no user accounts, maps, route polylines, image export, or full offline-first workflow. Realtime reconnects normally, but writes made while the database is unavailable surface as errors rather than forming an offline queue. Route caching is process-local, day assignment is geographic, reservations cannot be pinned to a date, and `stay_time_max` does not allocate optional slack. Live Supabase, provider, and deployment behavior requires credentials and separate verification.

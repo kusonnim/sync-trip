@@ -59,7 +59,7 @@ button, input, select, textarea { font-family: inherit; }
   flex-direction: column;
 }
 
-/* 헤더 */
+/* Header */
 .topbar {
   padding: 24px 20px 12px;
   display: flex;
@@ -76,7 +76,7 @@ button, input, select, textarea { font-family: inherit; }
   gap: 12px;
 }
 
-/* 카드 */
+/* Cards */
 .card {
   background: var(--card);
   border: 1px solid var(--line);
@@ -97,7 +97,7 @@ button, input, select, textarea { font-family: inherit; }
 }
 .card-head .count { font-size: 12px; color: var(--ink-faint); }
 
-/* 폼 */
+/* Forms */
 label.field {
   display: flex;
   flex-direction: column;
@@ -132,7 +132,7 @@ input:focus, select:focus, textarea:focus {
   gap: 10px;
 }
 
-/* 버튼 */
+/* Buttons */
 button {
   font-weight: 700;
   cursor: pointer;
@@ -170,7 +170,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   padding: 10px;
   width: 100%;
 }
-/* 목록 행에 붙는 알약 버튼 */
+/* Compact pill buttons used within list rows */
 .pill {
   background: var(--card);
   color: var(--ink-soft);
@@ -202,7 +202,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   padding: 0;
 }
 
-/* 하단 고정 바 */
+/* Sticky footer action */
 .bottom-bar {
   position: sticky;
   bottom: 0;
@@ -210,7 +210,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   background: linear-gradient(180deg, rgba(247, 247, 248, 0), var(--shell) 38%);
 }
 
-/* 선택 토글 */
+/* Choice toggles */
 .choice-group { display: flex; gap: 8px; }
 .choice {
   flex: 1;
@@ -229,7 +229,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   color: var(--brand);
 }
 
-/* 목록 */
+/* Lists */
 .list { display: flex; flex-direction: column; gap: 8px; }
 .item {
   display: flex;
@@ -269,7 +269,7 @@ button:not(:disabled):active { filter: brightness(.96); }
 }
 .rank-dot.empty { background: var(--strip); color: var(--ink-faint); }
 
-/* 칩 */
+/* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   font-size: 12px;
@@ -288,7 +288,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   border-radius: 999px;
 }
 
-/* 방 코드 */
+/* Room code */
 .roomcode {
   font-size: 34px;
   font-weight: 800;
@@ -298,14 +298,14 @@ button:not(:disabled):active { filter: brightness(.96); }
   margin: 0;
 }
 
-/* 경로 요약 */
+/* Route summary */
 .stats { display: flex; flex-wrap: wrap; gap: 18px; }
 .stat { display: flex; flex-direction: column; gap: 3px; }
 .stat .label { font-size: 12px; color: var(--ink-faint); }
 .stat .value { font-size: 14px; font-weight: 600; }
 .stat .value.warn { color: var(--warn); }
 
-/* 타임라인 */
+/* Timeline */
 .timeline { display: flex; flex-direction: column; }
 .tl-row { display: flex; gap: 12px; }
 .tl-rail {
@@ -344,7 +344,7 @@ button:not(:disabled):active { filter: brightness(.96); }
   color: var(--ink-soft);
 }
 
-/* 알림 */
+/* Notices */
 .notice {
   border-radius: var(--radius-control);
   padding: 10px 12px;
@@ -367,7 +367,7 @@ button:not(:disabled):active { filter: brightness(.96); }
 }
 .notice.good .sub { font-size: 13px; font-weight: 400; color: var(--ink-soft); }
 
-/* 진행 표시 */
+/* Progress indicator */
 .progress-step {
   display: flex;
   align-items: center;

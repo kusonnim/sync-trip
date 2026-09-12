@@ -27,6 +27,9 @@ export default function PlacePicker({ room, me, isHost }) {
   const [searching, setSearching] = useState(false);
   const [ranking, setRanking] = useState(room.preferences[me.id] ?? []);
   const [editing, setEditing] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [hoursWarning, setHoursWarning] = useState('');
   const [rankFull, setRankFull] = useState(false);
 
   const submittedCount = room.members.filter((m) => m.submitted).length;
@@ -36,24 +39,59 @@ export default function PlacePicker({ room, me, isHost }) {
     let alive = true;
     setSearching(true);
     const timer = setTimeout(async () => {
-      const found = await searchPlaces(query);
-      if (alive) { setResults(found); setSearching(false); }
+      try {
+        const found = await searchPlaces(query);
+        if (alive) { setResults(found); setActionError(''); }
+      } catch {
+        if (alive) setActionError('장소 검색을 사용할 수 없습니다. 백엔드 연결을 확인하고 다시 시도해 주세요.');
+      } finally {
+        if (alive) setSearching(false);
+      }
     }, 250);
     return () => { alive = false; clearTimeout(timer); };
   }, [query]);
 
   // Adding is unlimited. If the ranking still has room, the new place goes in too.
-  function add(place) {
-    addPlace(room.code, place);
+  async function add(place) {
+    setActionError('');
+    try {
+      await addPlace(room.code, place);
+    } catch {
+      setActionError('장소를 담지 못했습니다. 연결을 확인하고 다시 시도해 주세요.');
+      return;
+    }
     setRanking((prev) => (prev.includes(place.id) || prev.length >= TOP_N ? prev : [...prev, place.id]));
     setQuery('');
     setResults([]);
 
     // Start with category defaults, then replace them when actual business hours arrive.
     // If the lookup fails, the defaults remain and itinerary creation can continue.
-    fetchPlaceHours(place.name).then((hours) => {
-      if (hours) updatePlace(room.code, place.id, { ...hours, hoursSource: 'google' });
-    });
+    fetchPlaceHours(place.name)
+      .then((hours) => {
+        if (hours) return updatePlace(room.code, place.id, { ...hours, hoursSource: 'google' });
+        setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 대표자가 직접 수정할 수 있습니다.');
+        return null;
+      })
+      .catch(() => setHoursWarning('영업시간을 확인하지 못해 카테고리 기본값을 사용합니다. 대표자가 직접 수정할 수 있습니다.'));
+  }
+
+  async function submit() {
+    setSubmitting(true); setActionError('');
+    try { await submitRanking(room.code, me.id, ranking); }
+    catch { setActionError('순위를 동기화하지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setSubmitting(false); }
+  }
+
+  async function analyze() {
+    setSubmitting(true); setActionError('');
+    try { await patchRoom(room.code, { status: 'analyzing', optimizationState: 'idle', optimizationOwner: null }); }
+    catch { setActionError('경로 계산을 시작하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.'); setSubmitting(false); }
+  }
+
+  async function discard(placeId) {
+    setActionError('');
+    try { await removePlace(room.code, placeId); }
+    catch { setActionError('장소를 삭제하지 못했습니다. 연결을 확인하고 다시 시도해 주세요.'); }
   }
 
   function promote(placeId) {
@@ -92,18 +130,18 @@ export default function PlacePicker({ room, me, isHost }) {
         me.submitted && isHost ? (
           <button
             className="btn-accent"
-            disabled={submittedCount < 1}
-            onClick={() => patchRoom(room.code, { status: 'analyzing' })}
+            disabled={submittedCount < 1 || submitting}
+            onClick={analyze}
           >
-            의견 취합하고 경로 만들기 ({submittedCount}명 제출)
+            {submitting ? '경로 만드는 중...' : `의견 취합하고 경로 만들기 (${submittedCount}명 제출)`}
           </button>
         ) : (
           <button
             className="btn-primary"
-            disabled={ranking.length === 0}
-            onClick={() => submitRanking(room.code, me.id, ranking)}
+            disabled={ranking.length === 0 || submitting}
+            onClick={submit}
           >
-            {me.submitted ? '순위 다시 제출하기' : `${ranking.length}곳 순위 제출하기`}
+            {submitting ? '순위 저장 중...' : me.submitted ? '순위 다시 제출하기' : `${ranking.length}곳 순위 제출하기`}
           </button>
         )
       }
@@ -117,6 +155,8 @@ export default function PlacePicker({ room, me, isHost }) {
         />
         <p className="hint">담는 개수는 제한이 없고, 순위는 {TOP_N}곳까지만 매깁니다.</p>
         {searching && <p className="hint">찾는 중...</p>}
+        {actionError && <p className="hint" style={{ color: 'var(--accent)' }}>{actionError}</p>}
+        {hoursWarning && <p className="hint" style={{ color: 'var(--accent)' }}>{hoursWarning}</p>}
         {results.length > 0 && (
           <div className="list">
             {results.map((p) => (
@@ -180,7 +220,7 @@ export default function PlacePicker({ room, me, isHost }) {
                 {isHost && (
                   <>
                     <button className="pill" onClick={() => toggleEditor(p.id)}>시간</button>
-                    <button className="pill" onClick={() => removePlace(room.code, p.id)}>삭제</button>
+                    <button className="pill" onClick={() => discard(p.id)}>삭제</button>
                   </>
                 )}
               </div>
@@ -200,7 +240,7 @@ export default function PlacePicker({ room, me, isHost }) {
       </div>
 
       {isHost && (
-        <PlaceTimeEditor code={room.code} place={placeById[editing]} onClose={() => setEditing(null)} />
+        <PlaceTimeEditor key={editing} code={room.code} place={placeById[editing]} onClose={() => setEditing(null)} />
       )}
     </Screen>
   );

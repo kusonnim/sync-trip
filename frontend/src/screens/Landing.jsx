@@ -4,20 +4,30 @@ import Screen from '../components/Screen';
 import { readRoom, resetLocalRooms } from '../lib/roomStore';
 import { createSeededRoom } from '../lib/seed';
 import { isDebug } from '../lib/debug';
+import { SYNC_MODE } from '../lib/runtimeConfig';
 
 export default function Landing() {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
-  const debug = isDebug();
+  const [joining, setJoining] = useState(false);
+  const debug = SYNC_MODE === 'mock' && isDebug();
 
-  function enter() {
+  async function enter() {
     const target = code.trim().toUpperCase();
-    if (!readRoom(target)) {
-      setError('그런 방이 없습니다. 코드를 다시 확인해 주세요.');
-      return;
+    setJoining(true);
+    setError('');
+    try {
+      if (!await readRoom(target)) {
+        setError('그런 방이 없습니다. 코드를 다시 확인해 주세요.');
+        return;
+      }
+      navigate(`/r/${target}`);
+    } catch {
+      setError('방을 조회할 수 없습니다. 연결을 확인하고 다시 시도해 주세요.');
+    } finally {
+      setJoining(false);
     }
-    navigate(`/r/${target}`);
   }
 
   return (
@@ -55,8 +65,8 @@ export default function Landing() {
               maxLength={4}
               style={{ letterSpacing: '.24em', textTransform: 'uppercase' }}
             />
-            <button className="btn-soft" style={{ flex: 'none' }} onClick={enter} disabled={code.length < 4}>
-              입장
+            <button className="btn-soft" style={{ flex: 'none' }} onClick={enter} disabled={code.length < 4 || joining}>
+              {joining ? '확인 중...' : '입장'}
             </button>
           </div>
           {error && <p className="hint" style={{ color: 'var(--accent)' }}>{error}</p>}

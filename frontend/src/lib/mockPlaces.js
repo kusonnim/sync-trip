@@ -3,6 +3,7 @@
 // Names and addresses stay in Korean because the product serves Korean travelers.
 
 export const MOCK_PLACES = [
+  { id: 'p-seoul-station', name: '서울역', category: 'attraction', lat: 37.5547, lng: 126.9707, address: '서울 용산구 한강대로 405' },
   { id: 'p-seongsu-cafe', name: '성수동 대림창고', category: 'cafe', lat: 37.5445, lng: 127.0557, address: '서울 성동구 성수이로 78' },
   { id: 'p-seoul-forest', name: '서울숲', category: 'attraction', lat: 37.5443, lng: 127.0374, address: '서울 성동구 뚝섬로 273' },
   { id: 'p-namsan', name: 'N서울타워', category: 'attraction', lat: 37.5512, lng: 126.9882, address: '서울 용산구 남산공원길 105' },

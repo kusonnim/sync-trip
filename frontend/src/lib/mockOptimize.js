@@ -154,11 +154,11 @@ export function findConflicts(places, mode) {
     for (let j = i + 1; j < fixed.length; j += 1) {
       const a = fixed[i];
       const b = fixed[j];
-      const gap = Math.abs(toMinutes(b.hard_constraint.start) - toMinutes(a.hard_constraint.start));
-      const need = leg(a, b, mode).minutes + a.stay_time_min;
-      if (gap < need) {
-        const [early, late] =
-          toMinutes(a.hard_constraint.start) <= toMinutes(b.hard_constraint.start) ? [a, b] : [b, a];
+      const [early, late] =
+        toMinutes(a.hard_constraint.start) <= toMinutes(b.hard_constraint.start) ? [a, b] : [b, a];
+      const available = toMinutes(late.hard_constraint.end) - toMinutes(early.hard_constraint.start);
+      const need = early.stay_time_min + leg(early, late, mode).minutes;
+      if (available < need) {
         out.push({
           place_ids: [early.place_id, late.place_id],
           message:

@@ -21,7 +21,7 @@ export default function RouteCard({ route, open, onToggle, votes, onVote, myVote
   return (
     <div className="card" style={{ gap: 14, borderColor: picked ? tone.color : 'var(--line)' }}>
       <div className="card-head" style={{ alignItems: 'center' }}>
-        <div className="card-title" style={{ color: tone.color }}>{route.label ?? tone.name}</div>
+        <div className="card-title" style={{ color: tone.color }}>{tone.name}</div>
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {votes !== undefined && <span className="chip gray">{votes}표</span>}
           <span className="tag" style={{ background: tone.tint, color: tone.color }}>{tone.tag}</span>
@@ -48,6 +48,8 @@ export default function RouteCard({ route, open, onToggle, votes, onVote, myVote
           </div>
         )}
       </div>
+
+      {route.warning && <div className="notice warn" style={{ marginTop: 12 }}>{route.warning.message}</div>}
 
       <button className="btn-outline" onClick={onToggle}>
         {open ? '일정 접기' : '일정 보기'}

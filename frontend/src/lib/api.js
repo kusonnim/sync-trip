@@ -1,22 +1,26 @@
 // Centralize backend calls. Request and response shapes follow the PROJECT.md section 4 contract.
-// Setting VITE_API_BASE in .env disables USE_MOCK and calls the real backend.
+// VITE_API_MODE explicitly selects the backend or local mock implementation.
 //
 // Keep all external API keys in the backend. Never add Kakao, ODsay, or Google keys here.
 
 import { searchMockPlaces } from './mockPlaces.js';
 import { optimizeLocally } from './mockOptimize.js';
 import { applyCategoryDefaults } from './categories.js';
+import { API_BASE, API_MODE } from './runtimeConfig.js';
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? '';
-export const USE_MOCK = !API_BASE;
+export const USE_MOCK = API_MODE === 'mock';
 
 async function request(path, options) {
+  if (!USE_MOCK && !API_BASE) {
+    throw new Error('Backend configuration is missing. Ask the host to set VITE_API_BASE.');
+  }
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
-  if (!res.ok) throw new Error(`${path} failed (${res.status})`);
-  return res.json();
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.message || 'The backend is temporarily unavailable. Please try again.');
+  return body;
 }
 
 /** PROJECT.md ① GET /api/search?keyword= */
@@ -41,13 +45,9 @@ export async function searchPlaces(keyword) {
 /** PROJECT.md ② GET /api/place/details?name= */
 export async function fetchPlaceHours(name) {
   if (USE_MOCK) return null; // The mock keeps the category defaults.
-  try {
-    const body = await request(`/api/place/details?name=${encodeURIComponent(name)}`);
-    if (body.status !== 'success') return null;
-    return { openTime: body.data.open_time, closeTime: body.data.close_time };
-  } catch {
-    return null; // Itinerary creation must continue when business hours are unavailable.
-  }
+  const body = await request(`/api/place/details?name=${encodeURIComponent(name)}`);
+  if (body.status !== 'success') return null;
+  return { openTime: body.data.open_time, closeTime: body.data.close_time };
 }
 
 /**

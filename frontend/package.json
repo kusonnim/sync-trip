@@ -8,10 +8,11 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check": "node scripts/check-optimizer.mjs"
+    "check": "node scripts/check-optimizer.mjs",
+    "test:integration": "node scripts/check-room-store.mjs"
   },
   "dependencies": {
-    "firebase": "^12.19.0",
+    "@supabase/supabase-js": "^2.116.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3"

@@ -4,7 +4,9 @@
 
 import { MOCK_PLACES } from './mockPlaces.js';
 import { applyCategoryDefaults } from './categories.js';
-import { makeRoomCode, patchRoom, setMyId } from './roomStore.js';
+import { makeRoomCode } from './roomStore.js';
+import { saveSeededMockRoom } from './mockRoomStore.js';
+import { makeMemberId } from './roomIdentity.js';
 
 const NICKNAMES = ['재은', '지훈', '수민', '예린', '도현'];
 
@@ -28,17 +30,18 @@ function today() {
 export function createSeededRoom() {
   const code = makeRoomCode();
   const members = NICKNAMES.map((nickname, i) => ({
-    id: `m-seed-${i}`,
+    id: makeMemberId(),
     nickname,
     isHost: i === 0,
     submitted: true,
   }));
 
   const pickedIds = [...new Set(RANKINGS.flat())];
+  const rankingByOriginalId = Object.fromEntries(members.map((member, index) => [member.id, RANKINGS[index]]));
   const places = pickedIds
     .map((id) => MOCK_PLACES.find((p) => p.id === id))
     .filter(Boolean)
-    .map((p) => applyCategoryDefaults({ ...p, addedBy: 'm-seed-0', isFixed: false, visitWindow: null }));
+    .map((p) => applyCategoryDefaults({ ...p, addedBy: members[0].id, isFixed: false, visitWindow: null }));
 
   const seoulStation = { name: '서울역', lat: 37.5547, lng: 126.9707 };
   const room = {
@@ -57,15 +60,12 @@ export function createSeededRoom() {
     destination: seoulStation,
     members,
     places,
-    preferences: Object.fromEntries(members.map((m, i) => [m.id, RANKINGS[i]])),
+    preferences: rankingByOriginalId,
     routes: [],
     error: null,
     finalVotes: {},
     confirmedRouteId: null,
   };
 
-  localStorage.setItem(`synctrip:room:${code}`, JSON.stringify(room));
-  patchRoom(code, {}); // Notify any screen already subscribed.
-  setMyId(code, members[0].id); // This tab enters as the host.
-  return room;
+  return saveSeededMockRoom(room);
 }

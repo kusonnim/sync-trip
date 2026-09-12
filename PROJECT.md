@@ -31,10 +31,11 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the frontend exists and runs the whole flow on its own. The backend folder is not
-written yet. Until it is, the frontend answers its own `/api/optimize` calls with a stand-in engine
-(`src/lib/mockOptimize.js`) that speaks exactly the contract in section 4, so swapping in the real
-backend is a one-line environment change (`VITE_API_BASE`).
+**Build status:** the final MVP connects the React/Vite frontend to Supabase PostgreSQL and Realtime
+for collaborative state, while FastAPI remains responsible for provider proxying and optimization.
+Production uses explicit `supabase` and `backend` modes; an explicit `mock` mode remains available
+for local demos. The backend provides Kakao Local search, Google Places business hours, Track 1
+optimization, and bounded Track 2 refinement through Kakao Mobility or ODsay.
 
 ```text
 📦 SyncTrip
@@ -47,17 +48,22 @@ backend is a one-line environment change (`VITE_API_BASE`).
  ┃ ┃ ┣ 📂 components/        # Timeline, RouteCard, ConflictNotice
  ┃ ┃ ┗ 📂 lib/
  ┃ ┃   ┣ 📜 api.js           # Backend communication (fetch)
- ┃ ┃   ┣ 📜 roomStore.js     # Room state + realtime sync (localStorage now, Firestore later)
+ ┃ ┃   ┣ 📜 roomStore.js     # Stable facade over Supabase or explicit local mock state
+ ┃ ┃   ┣ 📜 supabaseRoomStore.js # PostgreSQL RPCs and one Realtime channel per room
  ┃ ┃   ┣ 📜 preference.js    # Borda scoring and candidate selection
- ┃ ┃   ┗ 📜 mockOptimize.js  # Stand-in optimizer until the backend is ready
+ ┃ ┃   ┗ 📜 mockOptimize.js  # Explicit local/demo optimizer fallback
  ┃ ┣ 📂 scripts/
  ┃ ┃ ┗ 📜 check-optimizer.mjs # Constraint checks, run with `npm run check`
  ┃ ┗ 📜 package.json
  ┃
- ┗ 📂 backend/ (Python FastAPI) — not written yet
+ ┗ 📂 backend/ (Python FastAPI) — production-configurable place APIs and two-track optimizer
    ┣ 📂 app/
-   ┃ ┣ 📜 main.py          # FastAPI app execution and CORS setup
-   ┃ ┗ 📜 optimizer.py     # Two-Track routing & Hard Constraint filtering algorithm
+   ┃ ┣ 📜 main.py          # FastAPI application and CORS setup
+   ┃ ┣ 📂 api/             # Search, business-hours, and optimization routes
+   ┃ ┣ 📂 models/          # Explicit API request and response models
+   ┃ ┣ 📂 optimizer/       # Day splitting, estimation, constraints, scoring, conflicts
+   ┃ ┣ 📂 routing/         # Cached Kakao Mobility and ODsay routing adapters
+   ┃ ┗ 📂 services/        # Kakao Local and Google Places adapters
    ┣ 📜 requirements.txt   # FastAPI, Uvicorn, Requests, etc.
    ┗ 📜 .env               # API Key storage (never committed)
 
@@ -65,6 +71,28 @@ backend is a one-line environment change (`VITE_API_BASE`).
 
 CORS: open the Vercel frontend origin on the FastAPI side before anything else. This is the single
 most common thing to break late in a hackathon.
+
+### Collaborative PostgreSQL Model
+
+`rooms` uses an internal UUID primary key and a separate unique four-character code. Its child
+tables are `room_members`, `room_places`, `room_preferences`, `room_routes`, `room_errors`, and
+`room_final_votes`. Every child has a foreign key to `rooms(id)` with `ON DELETE CASCADE`.
+Composite primary keys enforce one member, place, ranking, and final vote per relevant room key.
+Nested optimizer routes and structured errors remain JSONB because their shape is already defined
+by the API contract.
+
+The browser keeps a stable random member ID and a per-room host token. PostgreSQL stores only the
+host-token digest in a private, non-published table. All mutations use narrow RPCs; browser roles
+have read-only table access for Realtime. `acquire_optimization_lock` atomically verifies the host,
+uses database time for a two-minute stale threshold, and stores a UUID nonce. Completion/failure
+RPCs require that same nonce, so an abandoned run cannot overwrite a recovered one.
+
+Scheduled visit windows are stored in the existing `room_places.hard_constraint` JSONB and exposed
+to the UI as `{ start, end }`. One Supabase Realtime channel watches the seven room tables. Every room-scoped change coalesces into
+one `get_room_snapshot` RPC, producing a coherent camelCase view for the existing screens. RLS is
+enabled on every table, but the accountless design cannot prove ownership of a client-generated
+member ID and read access needed for anonymous Realtime is not private. Supabase Auth or a trusted
+persistence backend is required before storing sensitive data.
 
 ---
 
@@ -124,7 +152,9 @@ departure time and the daily "everyone goes home" deadline, applied to every day
 
 Business hours travel on the place object itself (`open_time` / `close_time`), so `hard_constraint`
 means only a user-entered reservation window and is `null` for most places.
-`preference_score` is the summed Borda score from the team's rankings; use it to break ties.
+`preference_score` is the summed Borda score used to select candidates before optimization. It is
+preserved in this contract but is not an order tiebreaker: every permutation contains the same
+places, so its aggregate is constant.
 
 ```json
 {
@@ -174,6 +204,7 @@ means only a user-entered reservation window and is `null` for most places.
 
 Two routes over the same candidates, ordered `min_time` first. Each route holds one entry per
 travel day, and each day holds the alternating place / transit timeline.
+Phase 3 may also include backward-compatible `routing_source` and `warning` fields on each route.
 
 ```json
 {
@@ -184,6 +215,7 @@ travel day, and each day holds the alternating place / transit timeline.
       "label": "Fastest Route",
       "total_time": 240,
       "total_cost": 8600,
+      "routing_source": "provider",
       "days": [
         {
           "date": "2026-09-19",
@@ -191,7 +223,7 @@ travel day, and each day holds the alternating place / transit timeline.
           "total_cost": 8600,
           "timeline": [
             { "type": "place", "name": "Seoul Station", "time": "10:00" },
-            { "type": "transit", "mode": "transit", "instruction": "Bus 1003 board", "time": "10:00 ~ 10:45", "duration": 45, "cost": 1500 },
+            { "type": "transit", "mode": "transit", "instruction": "Estimated transit leg", "time": "10:00 ~ 10:45", "duration": 45, "cost": 1500 },
             { "type": "place", "place_id": "kakao_12345", "name": "Haedong Yonggungsa", "category": "attraction", "time": "10:45 ~ 12:15", "stay_duration": 90, "wait_duration": 0 }
           ]
         }
@@ -228,27 +260,33 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 ---
 
-## 5. Algorithm Logic Summary (`optimizer.py` Skeleton)
+## 5. Algorithm Logic Summary (Phase 3)
 
-0. **Day Splitting (runs first):** Cluster the candidate places by coordinate into as many groups as there are travel days, cap each group at 4 places, then run everything below once per day. Every day starts at `start_location` and ends at `end_location`.
+0. **Day Splitting (runs first):** Cluster every candidate by coordinate into as many groups as there are travel days, targeting the normal four places per day. Exhaustive search supports at most six places per day (`6! = 720`). Reject larger inputs explicitly; never truncate or discard candidates. Every day starts at `start_location` and ends at `end_location`.
 
 1. **Two-Track Routing Strategy:**
-* **Track 1 (Fast Permutation Calculation):** Use static average travel times to quickly evaluate all permutations (e.g., $120$ combinations for 5 places) in under 0.1 seconds to isolate the optimal orders.
-* **Track 2 (Precise Timeline Generation):** Run dynamic transit/car routing APIs sequentially only on the winning routes to construct accurate step-by-step timetables. Cache by `(origin, destination, mode)` so the two options share calls on legs they have in common.
+* **Track 1 (Fast Permutation Calculation):** Use static average travel times to evaluate every permutation, up to 720 combinations for six places, and isolate the optimal orders.
+* **Track 2 (Precise Timeline Generation):** Retain the top three Track 1 candidates per objective and day. Route only their legs through ODsay or Kakao Mobility, rebuild timelines, revalidate every constraint, and rerank using precise totals. Successful legs use a 30-minute in-memory cache keyed by directed coordinates and mode. No network call occurs during permutation search.
 
 
 2. **Hard Constraint Validation:**
-* Check if arrival happens later than a place's closing time, or if the minimum stay does not fit before `close_time`.
-* Check if arrival falls within the user-defined reservation window (`hard_constraint`).
+* Wait when arrival is before opening, then require the entire minimum stay to fit before `close_time`.
+* Wait for an upcoming reservation when early, and require the actual visit start to remain within its window.
+* Wait for restaurants until lunch (11:30–13:30) or dinner (17:30–19:30), and validate the visit start rather than interval overlap.
+* Schedule exactly `stay_time_min`; `stay_time_max` remains a validated upper bound for future slack allocation.
 * Check that returning to `end_location` lands before `end_deadline`.
 * Drop violating routes immediately using `continue`.
 
 
 3. **Final Selection:** Score the surviving permutations twice and return **two** routes.
-* `min_time` — rank by total travel minutes.
-* `min_cost` — rank by total transit cost, with travel time as a light tiebreaker.
-* Subtract `preference_score` from both rankings so the team's favourites win ties.
-* If both objectives land on the same order, give `min_cost` the next-best distinct order so the user always has two real choices.
+* `min_time` — rank lexicographically by total travel minutes, then cost, then stable place order.
+* `min_cost` — rank lexicographically by total estimated cost, then travel time, then stable place order.
+* Borda preferences select candidates before this endpoint. Do not subtract the constant `sum(preference_score)` from permutation scores.
+* If both objectives land on the same order, give `min_cost` the next-best valid distinct order. If only one valid route exists, return it in both entries.
 
 
-4. **Conflict Diagnosis (before the permutation search):** Compare every pair of places that has a `hard_constraint`. If the gap between the two reservation times is smaller than the travel time plus the first place's minimum stay, return `TIME_CONFLICT` naming both places. This check is $O(m^2)$ and far cheaper than the search, so run it first.
+4. **Conflict Diagnosis (before the permutation search):** Compare every pair of reserved places within each allocated day. Determine the chronologically earlier reservation first, then check its minimum stay plus travel against the later window end. Return `TIME_CONFLICT` naming both places when impossible. Other infeasibility returns `NO_ROUTE`.
+
+5. **Track 2 Failure Policy:** A provider no-route result invalidates that precise candidate and advances to the next bounded candidate. If none survive, return `PRECISE_ROUTE_INFEASIBLE`. Timeouts, rate limits, malformed responses, and temporary upstream failures return the Track 1 routes with an explicit `ROUTING_FALLBACK` warning. Missing configuration and authentication errors remain visible service failures.
+
+6. **Precise Cost Semantics:** ODsay's reported `payment` is the transit fare; when absent, use the Track 1 fare estimate and emit `ESTIMATED_TRANSIT_FARE`. Driving cost is estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll, without taxi fare.

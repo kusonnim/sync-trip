@@ -1,0 +1,4 @@
+project_id = "sync-trip"
+
+[realtime]
+enabled = true

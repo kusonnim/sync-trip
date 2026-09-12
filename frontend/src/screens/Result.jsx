@@ -8,6 +8,8 @@ import { durationText, won } from '../lib/time';
 export default function Result({ room, me, isHost }) {
   const [open, setOpen] = useState(room.routes[0]?.type ?? null);
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncError, setSyncError] = useState('');
 
   const confirmed = room.status === 'confirmed';
   const myVote = room.finalVotes[me.id];
@@ -26,6 +28,25 @@ export default function Result({ room, me, isHost }) {
     }
   }
 
+  async function vote(type) {
+    setSaving(true); setSyncError('');
+    try { await castVote(room.code, me.id, type); }
+    catch { setSyncError('투표를 동기화하지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setSaving(false); }
+  }
+
+  async function confirm() {
+    setSaving(true); setSyncError('');
+    try { await patchRoom(room.code, { status: 'confirmed', confirmedRouteId: room.routes[leaderIndex].type }); }
+    catch { setSyncError('최종 일정을 확정하지 못했습니다. 다시 시도해 주세요.'); setSaving(false); }
+  }
+
+  async function returnToEditing() {
+    setSaving(true); setSyncError('');
+    try { await patchRoom(room.code, { status: 'collecting', optimizationState: 'idle' }); }
+    catch { setSyncError('수정 화면으로 돌아가지 못했습니다. 다시 시도해 주세요.'); setSaving(false); }
+  }
+
   // The calculation failed. Name the conflict and send the user back to the edit screen.
   if (room.error) {
     return (
@@ -35,13 +56,15 @@ export default function Result({ room, me, isHost }) {
         footer={
           <button
             className="btn-primary"
-            onClick={() => patchRoom(room.code, { status: 'collecting', error: null })}
+            disabled={saving}
+            onClick={returnToEditing}
           >
-            장소와 시간 고치러 가기
+            {saving ? '돌아가는 중...' : '장소와 시간 고치러 가기'}
           </button>
         }
       >
         <ConflictNotice error={room.error} places={room.places} />
+        {syncError && <p className="hint" style={{ color: 'var(--accent)' }}>{syncError}</p>}
       </Screen>
     );
   }
@@ -58,15 +81,10 @@ export default function Result({ room, me, isHost }) {
         ) : isHost ? (
           <button
             className="btn-primary"
-            disabled={castCount === 0}
-            onClick={() =>
-              patchRoom(room.code, {
-                status: 'confirmed',
-                confirmedRouteId: room.routes[leaderIndex].type,
-              })
-            }
+            disabled={castCount === 0 || saving}
+            onClick={confirm}
           >
-            최다 득표안으로 확정하기
+            {saving ? '확정하는 중...' : '최다 득표안으로 확정하기'}
           </button>
         ) : (
           <button className="btn-ghost" style={{ width: '100%' }} disabled>
@@ -100,9 +118,10 @@ export default function Result({ room, me, isHost }) {
           onToggle={() => setOpen(open === route.type ? null : route.type)}
           votes={confirmed ? undefined : votes[room.routes.indexOf(route)]}
           myVote={myVote}
-          onVote={confirmed ? undefined : (type) => castVote(room.code, me.id, type)}
+          onVote={confirmed || saving ? undefined : vote}
         />
       ))}
+      {syncError && <p className="hint" style={{ color: 'var(--accent)' }}>{syncError}</p>}
     </Screen>
   );
 }
