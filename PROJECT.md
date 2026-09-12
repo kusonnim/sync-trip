@@ -10,7 +10,7 @@
 
 ## 2. Core Features
 
-1. **Place Cart & Ranked Voting:** Team members collect desired locations and each submits a personal 1~n ranking. Borda scores are summed to pick the candidates (4 slots per travel day, plus any place the host marked as required).
+1. **Place Cart & Ranked Voting:** Team members add as many places as they like to a shared cart, then each picks a personal **top 3** from it. Borda scores (3/2/1) are summed to choose the candidates (4 slots per travel day, plus any place the host marked as required). A place that was only added, never ranked, scores 0.
 2. **Hybrid Constraint Settings:**
 * Automatic fetching of basic business hours (or utilizing fallback mock DB for testing).
 * The host can manually override/set **Hard Constraints** (e.g., "Dinner reservation at 6:00 PM").

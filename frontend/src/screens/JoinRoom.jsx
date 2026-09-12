@@ -8,27 +8,27 @@ export default function JoinRoom({ room, onJoined }) {
     <Screen
       step={4}
       title={room.title}
-      subtitle={`Room Code ${room.code}`}
+      subtitle={`방 코드 ${room.code}`}
       footer={
         <button
           className="btn-accent"
           disabled={!nickname.trim()}
           onClick={() => onJoined(joinRoom(room.code, nickname.trim()))}
         >
-          Join Room
+          참여하기
         </button>
       }
     >
       <div className="card pad-lg">
-        <div className="card-title">Enter Your Nickname</div>
-        <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="e.g., Alex" />
+        <div className="card-title">닉네임을 입력해 주세요</div>
+        <input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="예: 지훈" />
         <p className="muted" style={{ marginBottom: 0 }}>
-          No sign-in is required. Choose the name other members will see.
+          로그인은 필요 없습니다. 팀원들에게 보일 이름만 정해 주세요.
         </p>
       </div>
 
       <div className="card">
-        <div className="card-title">Members Already Here: {room.members.length}</div>
+        <div className="card-title">이미 들어온 사람 {room.members.length}명</div>
         <div className="chips">
           {room.members.map((m) => (
             <span className="chip gray" key={m.id}>{m.nickname}{m.isHost ? ' 👑' : ''}</span>

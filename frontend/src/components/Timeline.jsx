@@ -3,6 +3,10 @@ import { categoryLabel } from '../lib/categories';
 
 // Render the timeline array from the PROJECT.md section 3 response as-is.
 // Place and transit entries alternate; the first and last entries are the start and end locations.
+function visitText(w) {
+  return w.start === w.end ? w.start : `${w.start}-${w.end}`;
+}
+
 export default function Timeline({ timeline }) {
   return (
     <div className="timeline">
@@ -18,9 +22,9 @@ export default function Timeline({ timeline }) {
             <div className="tl-name">{item.name}</div>
             {item.stay_duration != null && (
               <div className="tl-note">
-                {categoryLabel(item.category)} · Stay for {durationText(item.stay_duration)}
-                {item.hard_constraint ? ` · ${item.hard_constraint.start} reservation` : ''}
-                {item.wait_duration > 5 ? ` · Wait ${item.wait_duration} min` : ''}
+                {categoryLabel(item.category)} · {durationText(item.stay_duration)} 머무름
+                {item.hard_constraint ? ` · ${visitText(item.hard_constraint)} 방문 지정` : ''}
+                {item.wait_duration > 5 ? ` · 대기 ${durationText(item.wait_duration)}` : ''}
               </div>
             )}
           </div>

@@ -4,7 +4,7 @@
 // must pass the same checks once it is connected.
 
 import { optimizeLocally, findConflicts } from '../src/lib/mockOptimize.js';
-import { picksPerPerson, scorePlaces, pickCandidates } from '../src/lib/preference.js';
+import { TOP_N, scorePlaces, pickCandidates } from '../src/lib/preference.js';
 import { toMinutes } from '../src/lib/time.js';
 
 let failed = 0;
@@ -50,7 +50,7 @@ function settings(extra = {}) {
 const stopsOf = (route) =>
   route.days.flatMap((d) => d.timeline.filter((t) => t.type === 'place' && t.place_id));
 
-// 1. A place with a reservation window must be visited within that window.
+// 1. A place with a scheduled visit window must be visited within that window.
 {
   const places = [
     place('a', 'Gyeongbokgung Palace', 'attraction', 37.5796, 126.9770),
@@ -64,7 +64,7 @@ const stopsOf = (route) =>
     res.status === 'success' &&
     res.routes.every((r) =>
       stopsOf(r).every((s) => !s.hard_constraint || s.time.startsWith(s.hard_constraint.start)));
-  check('Visit starts within reservation window', ok, `${res.routes?.length ?? 0} routes generated`);
+  check('Visit starts within its scheduled window', ok, `${res.routes?.length ?? 0} routes generated`);
 }
 
 // 2. Reject permutations that cannot fit the minimum stay before closing.
@@ -94,7 +94,7 @@ const stopsOf = (route) =>
   check('Place restaurants only in meal windows', ok, meals.map((s) => s.time).join(', '));
 }
 
-// 4. Two conflicting reservations return TIME_CONFLICT and identify both places.
+// 4. Two conflicting scheduled visits return TIME_CONFLICT and identify both places.
 {
   const places = [
     place('a', 'Gwangjang Market', 'restaurant', 37.5701, 126.9996, {
@@ -158,17 +158,25 @@ const stopsOf = (route) =>
     res.routes[0].total_time === days.reduce((s, d) => s + d.total_time, 0));
 }
 
-// 7. Picks per person and preference-score aggregation.
+// 7. Preference scoring. First choice 3, second 2, third 1, unranked 0.
 {
-  check('Picks per person (1 day, 4 people)', picksPerPerson(1, 4) === 3, `${picksPerPerson(1, 4)} places`);
-  check('Picks per person (3 days, 4 people)', picksPerPerson(3, 4) === 5, `${picksPerPerson(3, 4)} places`);
-  const scored = scorePlaces(
-    [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
-    { m1: ['b', 'a'], m2: ['b'] },
-    3,
-  );
+  const pool = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase() }));
+  const scored = scorePlaces(pool, {
+    m1: ['b', 'a', 'c'],   // b 3, a 2, c 1
+    m2: ['b', 'c', 'a'],   // b 3, c 2, a 1
+  });
+  const by = Object.fromEntries(scored.map((p) => [p.id, p.score]));
+  check('Borda scores are summed', by.b === 6 && by.a === 3 && by.c === 3, JSON.stringify(by));
+  check('An unranked place scores zero', by.d === 0, `d ${by.d} points`);
+
+  // A place that was only added can still fill a leftover candidate slot.
   const top = pickCandidates(scored, 1)[0];
   check('Highest preference score is selected first', top.id === 'b', `${top.id} (${top.score} points)`);
+
+  // Entries past the top 3 are ignored even if submitted.
+  const over = scorePlaces(pool, { m1: ['a', 'b', 'c', 'd'] });
+  const overBy = Object.fromEntries(over.map((p) => [p.id, p.score]));
+  check(`Entries beyond the top ${TOP_N} are ignored`, overBy.d === 0, `d ${overBy.d} points`);
 }
 
 console.log(failed ? `\n${failed} checks failed` : '\nAll checks passed');

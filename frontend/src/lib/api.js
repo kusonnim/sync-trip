@@ -75,8 +75,10 @@ export function buildOptimizeBody(room, candidates) {
       stay_time_max: p.maxStay,
       open_time: p.openTime,
       close_time: p.closeTime,
-      // The UI accepts one reservation time and expands it into the contract's window shape.
-      hard_constraint: p.fixedTime ? { start: p.fixedTime, end: p.fixedTime } : null,
+      // Pass the scheduled visit window straight through. When only a start was entered,
+      // start and end are equal. fixedTime is the legacy field kept for older rooms.
+      hard_constraint:
+        p.visitWindow ?? (p.fixedTime ? { start: p.fixedTime, end: p.fixedTime } : null),
       preference_score: p.score ?? 0,
     })),
   };

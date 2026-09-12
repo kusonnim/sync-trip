@@ -4,7 +4,7 @@
 //
 // It follows the PROJECT.md section 5 Track 1 rules without calling a live routing API.
 
-import { toMinutes, toHHMM, durationText, daysBetween, listDates } from './time.js';
+import { toMinutes, toHHMM, daysBetween, listDates } from './time.js';
 
 const DETOUR = 1.3;
 const SPEED = { car: 40, transit: 22 }; // km/h
@@ -15,10 +15,11 @@ const MAX_PER_DAY = 4;
 
 // PROJECT.md section 5.3: min_time prioritizes travel time; min_cost prioritizes cost.
 const OBJECTIVES = [
-  { type: 'min_time', label: 'Fastest Route', wt: 1.0, wc: 0.0 },
-  { type: 'min_cost', label: 'Lowest-Cost Route', wt: 0.2, wc: 0.1 },
+  { type: 'min_time', label: '최소 시간', wt: 1.0, wc: 0.0 },
+  { type: 'min_cost', label: '최소 비용', wt: 0.2, wc: 0.1 },
 ];
 const PREFERENCE_WEIGHT = 3;
+const WAIT_WEIGHT = 0.5; // Count one waiting minute as half a travelling minute.
 
 function haversine(a, b) {
   const R = 6371;
@@ -60,8 +61,10 @@ function inMealSlot(start) {
   return within(LUNCH) || within(DINNER);
 }
 
-function instructionFor(mode, minutes) {
-  return `${mode === 'transit' ? 'Public transit' : 'Drive'} ${durationText(minutes)}`;
+function instructionFor(mode) {
+  // The real backend puts a route name such as "Line 2: Konkuk Univ. to Seongsu" here.
+  // Duration travels in its own field, so it does not belong in this text.
+  return mode === 'transit' ? '대중교통' : '자차';
 }
 
 // Simulate one permutation and return null when it violates a constraint.
@@ -72,6 +75,7 @@ function simulate(order, ctx) {
   let prev = origin;
   let totalTime = 0;
   let totalCost = 0;
+  let totalWait = 0;
 
   for (const place of order) {
     const move = leg(prev, place, mode);
@@ -92,7 +96,7 @@ function simulate(order, ctx) {
     timeline.push({
       type: 'transit',
       mode,
-      instruction: instructionFor(mode, move.minutes),
+      instruction: instructionFor(mode),
       time: `${toHHMM(cursor)} ~ ${toHHMM(arrive)}`,
       duration: move.minutes,
       cost: move.cost,
@@ -110,6 +114,7 @@ function simulate(order, ctx) {
 
     totalTime += move.minutes;
     totalCost += move.cost;
+    totalWait += start - arrive;
     cursor = start + stay;
     prev = place;
   }
@@ -121,7 +126,7 @@ function simulate(order, ctx) {
   timeline.push({
     type: 'transit',
     mode,
-    instruction: instructionFor(mode, back.minutes),
+    instruction: instructionFor(mode),
     time: `${toHHMM(cursor)} ~ ${toHHMM(finish)}`,
     duration: back.minutes,
     cost: back.cost,
@@ -133,6 +138,7 @@ function simulate(order, ctx) {
     timeline,
     total_time: totalTime + back.minutes,
     total_cost: totalCost + back.cost,
+    total_wait: totalWait,
     preference: order.reduce((sum, p) => sum + (p.preference_score ?? 0), 0),
   };
 }
@@ -156,9 +162,10 @@ export function findConflicts(places, mode) {
         out.push({
           place_ids: [early.place_id, late.place_id],
           message:
-            `The ${early.hard_constraint.start} reservation at ${early.name} conflicts with ` +
-            `the ${late.hard_constraint.start} reservation at ${late.name}. ` +
-            `The stay and travel require ${need} minutes. Adjust the time for one of these places.`,
+            `${early.name} ${early.hard_constraint.start} 방문과 ` +
+            `${late.name} ${late.hard_constraint.start} 방문은 ` +
+            `머무는 시간과 이동에 ${need}분이 필요해 함께 갈 수 없습니다. ` +
+            `둘 중 한 곳의 시간을 조정해 주세요.`,
         });
       }
     }
@@ -233,8 +240,8 @@ export function optimizeLocally(body) {
       status: 'error',
       code: 'NO_ROUTE',
       message:
-        'No route fits within the business hours and daily deadline. ' +
-        'Remove a place or choose a later deadline.',
+        '영업시간과 해산 시각 안에 들어가는 순서를 찾지 못했습니다. ' +
+        '장소를 줄이거나 해산 시각을 늦춰 주세요.',
       place_ids: [],
     };
   }
@@ -242,11 +249,13 @@ export function optimizeLocally(body) {
   const used = new Set();
   const routes = OBJECTIVES.map((obj) => {
     const days = perDay.map((candidates, dayIndex) => {
-      const ranked = [...candidates].sort(
-        (a, b) =>
-          (obj.wt * a.total_time + obj.wc * a.total_cost - a.preference * PREFERENCE_WEIGHT) -
-          (obj.wt * b.total_time + obj.wc * b.total_cost - b.preference * PREFERENCE_WEIGHT),
-      );
+      // Waiting counts alongside travelling. An order that burns hours waiting for a
+      // reservation must not win just because its travel time is short.
+      const cost = (c) =>
+        obj.wt * (c.total_time + c.total_wait * WAIT_WEIGHT) +
+        obj.wc * c.total_cost -
+        c.preference * PREFERENCE_WEIGHT;
+      const ranked = [...candidates].sort((a, b) => cost(a) - cost(b));
       // If both objectives choose the same order, use the runner-up to keep the options distinct.
       const pick = ranked.find((c) => !used.has(`${dayIndex}:${c.order}`)) ?? ranked[0];
       used.add(`${dayIndex}:${pick.order}`);
@@ -254,6 +263,7 @@ export function optimizeLocally(body) {
         date: dates[dayIndex],
         total_time: pick.total_time,
         total_cost: pick.total_cost,
+        total_wait: pick.total_wait,
         timeline: pick.timeline,
       };
     });
@@ -263,9 +273,18 @@ export function optimizeLocally(body) {
       label: obj.label,
       total_time: days.reduce((s, d) => s + d.total_time, 0),
       total_cost: days.reduce((s, d) => s + d.total_cost, 0),
+      total_wait: days.reduce((s, d) => s + d.total_wait, 0),
       days,
     };
   });
 
-  return { status: 'success', routes };
+  // When constraints are tight both objectives can land on the same order, leaving one
+  // real option. Return it once instead of showing the user two identical cards.
+  const signature = (r) =>
+    r.days.map((d) => d.timeline.filter((t) => t.place_id).map((t) => t.place_id).join('>')).join('|');
+  const unique = routes.filter(
+    (r, i) => routes.findIndex((other) => signature(other) === signature(r)) === i,
+  );
+
+  return { status: 'success', routes: unique };
 }
