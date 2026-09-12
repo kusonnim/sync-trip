@@ -78,6 +78,7 @@ async def test_odsay_request_coordinates_and_english_option(settings):
     assert params["EY"] == str(DESTINATION.lat)
     assert params["lang"] == "1"
     assert params["apiKey"] == "test-odsay-key"
+    assert captured.headers["referer"] == "https://frontend.example.com"
 
 
 @pytest.mark.parametrize("code", ["3", "4", "5", "6", "-98", "-99"])
@@ -109,6 +110,33 @@ async def test_odsay_missing_configuration_is_explicit():
     missing = Settings(_env_file=None, cors_origins="http://localhost:5173")
     with pytest.raises(MissingProviderKey, match="ODsay"):
         await ODsayService(missing).route(ORIGIN, DESTINATION)
+
+
+@pytest.mark.anyio
+async def test_odsay_missing_referer_configuration_is_explicit():
+    missing = Settings(
+        _env_file=None,
+        odsay_api_key="test-odsay-key",
+        cors_origins="http://localhost:5173",
+    )
+    with pytest.raises(MissingProviderKey, match="ODsay Referer"):
+        await ODsayService(missing).route(ORIGIN, DESTINATION)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "referer",
+    ["sync-trip.example.com", "https://sync-trip.example.com/path", "https://sync-trip.example.com?q=1"],
+)
+async def test_odsay_invalid_referer_configuration_is_explicit(referer):
+    invalid = Settings(
+        _env_file=None,
+        odsay_api_key="test-odsay-key",
+        odsay_referer=referer,
+        cors_origins="http://localhost:5173",
+    )
+    with pytest.raises(MissingProviderKey, match="ODsay Referer"):
+        await ODsayService(invalid).route(ORIGIN, DESTINATION)
 
 
 @pytest.mark.anyio

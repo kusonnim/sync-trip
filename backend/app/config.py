@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     kakao_rest_api_key: SecretStr | None = None
     google_places_api_key: SecretStr | None = None
     odsay_api_key: SecretStr | None = None
+    odsay_referer: str | None = None
     cors_origins: str = "http://localhost:5173"
     provider_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
     google_cache_ttl_seconds: int = Field(default=3600, ge=1)
@@ -33,6 +34,30 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return [origin.strip().rstrip("/") for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def odsay_referer_origin(self) -> str | None:
+        referer = (self.odsay_referer or "").strip().rstrip("/")
+        if not referer:
+            return None
+        parsed = urlparse(referer)
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.params
+            or parsed.query
+            or parsed.fragment
+            or (port is not None and not 1 <= port <= 65535)
+        ):
+            return None
+        return referer
 
     @model_validator(mode="after")
     def validate_cors_origins(self) -> "Settings":
