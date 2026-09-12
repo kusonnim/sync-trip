@@ -16,7 +16,7 @@ export default function TripSetup() {
     endDate: today,
     dailyStart: '10:00',
     dailyEnd: '21:00',
-    headcount: 4,
+    headcount: '',
     transportMode: 'transit',
     originName: '',
     destinationName: '',
@@ -26,7 +26,8 @@ export default function TripSetup() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
   const dayCount = daysBetween(form.startDate, form.endDate);
-  const ready = form.hostNickname.trim() && form.endDate >= form.startDate;
+  const headcount = Number(form.headcount);
+  const ready = form.hostNickname.trim() && form.endDate >= form.startDate && headcount >= 2;
 
   async function submit() {
     setCreating(true);
@@ -40,7 +41,7 @@ export default function TripSetup() {
       }
       const room = await createRoom({
         ...form,
-        headcount: Number(form.headcount),
+        headcount,
         origin: { name: originMatches[0].name, lat: originMatches[0].lat, lng: originMatches[0].lng },
         destination: { name: destinationMatches[0].name, lat: destinationMatches[0].lat, lng: destinationMatches[0].lng },
       });
@@ -56,12 +57,13 @@ export default function TripSetup() {
     <Screen
       title="여행 기본정보"
       subtitle="대표자가 먼저 입력합니다"
+      back={{ label: '처음', onClick: () => navigate('/'), disabled: creating }}
       footer={<button className="btn-primary" disabled={!ready || creating} onClick={submit}>{creating ? '여행방 만드는 중...' : '여행방 만들기'}</button>}
     >
       <div className="card" style={{ gap: 14 }}>
         <label className="field">
           <span>닉네임</span>
-          <input value={form.hostNickname} onChange={set('hostNickname')} />
+          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="ex) 민서" />
         </label>
         <label className="field">
           <span>여행 이름</span>
@@ -90,14 +92,16 @@ export default function TripSetup() {
             <input type="time" value={form.dailyEnd} onChange={set('dailyEnd')} />
           </label>
         </div>
-        <p className="hint">{dayCount - 1}박 {dayCount}일 일정! 총 {dayCount}일로 계산됩니다.</p>
+        <p className="hint">
+          {dayCount === 1 ? '당일치기' : `${dayCount - 1}박 ${dayCount}일`} 일정! 총 {dayCount}일로 계산됩니다.
+        </p>
       </div>
 
       <div className="card" style={{ gap: 14 }}>
         <div className="card-title">인원과 이동수단</div>
         <label className="field">
           <span>인원</span>
-          <input type="number" min={2} max={12} value={form.headcount} onChange={set('headcount')} />
+          <input type="number" min={2} max={12} value={form.headcount} onChange={set('headcount')} placeholder="ex) 5" />
         </label>
         <div className="choice-group">
           {[['transit', '🚌 대중교통'], ['car', '🚗 자차']].map(([value, label]) => (

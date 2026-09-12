@@ -44,9 +44,9 @@ export default function PlaceTimeEditor({ code, place, onClose }) {
   }
 
   return (
-    <div className="card" style={{ gap: 14 }}>
+    <div className="place-editor">
       <div className="card-head">
-        <div className="card-title">{place.name} 시간 설정</div>
+        <div className="card-title">시간 설정</div>
         <button className="link-btn" onClick={onClose}>닫기</button>
       </div>
 

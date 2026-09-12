@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen';
 import { joinRoom } from '../lib/roomStore';
 
 export default function JoinRoom({ room, onJoined }) {
+  const navigate = useNavigate();
   const [nickname, setNickname] = useState('');
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState('');
@@ -22,6 +24,7 @@ export default function JoinRoom({ room, onJoined }) {
     <Screen
       title={room.title}
       subtitle={`방 코드 ${room.code}`}
+      back={{ label: '처음', onClick: () => navigate('/'), disabled: joining }}
       footer={
         <button
           className="btn-accent"
