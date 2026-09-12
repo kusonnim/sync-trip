@@ -1,0 +1,25 @@
+# 환경변수
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# 배포
+.vercel/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

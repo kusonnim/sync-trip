@@ -1,0 +1,77 @@
+import { useEffect, useRef, useState } from 'react';
+import Screen from '../components/Screen';
+import { optimize, buildOptimizeBody } from '../lib/api';
+import { patchRoom } from '../lib/roomStore';
+import { picksPerPerson, scorePlaces, pickCandidates } from '../lib/preference';
+import { daysBetween } from '../lib/time';
+
+const STEPS = ['선호 점수 계산', '방문 후보 정리', '이동시간·비용 분석', '최적 경로 2안 생성'];
+
+export default function Analyzing({ room, isHost }) {
+  const [done, setDone] = useState(0);
+  const started = useRef(false);
+
+  useEffect(() => {
+    // 계산은 대표자 화면에서만 한 번 돌리고, 결과를 방에 써서 전원에게 퍼뜨린다.
+    if (!isHost || started.current) return;
+    started.current = true;
+
+    const ticker = setInterval(() => setDone((d) => Math.min(d + 1, STEPS.length - 1)), 500);
+
+    (async () => {
+      const dayCount = daysBetween(room.startDate, room.endDate);
+      const k = picksPerPerson(dayCount, room.headcount);
+      const scored = scorePlaces(room.places, room.preferences, k);
+      const candidates = pickCandidates(scored, dayCount);
+
+      let result;
+      try {
+        result = await optimize(buildOptimizeBody(room, candidates));
+      } catch (e) {
+        result = { status: 'error', code: 'REQUEST_FAILED', message: e.message, place_ids: [] };
+      }
+
+      clearInterval(ticker);
+      setDone(STEPS.length);
+
+      if (result.status === 'success') {
+        patchRoom(room.code, { routes: result.routes, error: null, status: 'voting' });
+      } else {
+        // 실패해도 화면은 죽지 않는다. 어디가 부딪히는지 알려주고 수정 화면으로 돌린다.
+        patchRoom(room.code, {
+          routes: [],
+          error: { code: result.code, message: result.message, placeIds: result.place_ids ?? [] },
+          status: 'voting',
+        });
+      }
+    })();
+
+    return () => clearInterval(ticker);
+  }, [isHost, room]);
+
+  return (
+    <Screen step={6} title="의견을 취합하고 있어요" subtitle="잠시만 기다려 주세요">
+      <div className="card pad-lg">
+        {STEPS.map((label, i) => (
+          <div className={i < done ? 'progress-step done' : 'progress-step'} key={label}>
+            <span className="tick">✓</span>
+            {label}
+          </div>
+        ))}
+      </div>
+
+      <div className="card">
+        <div className="card-title">이번 계산에 쓰인 조건</div>
+        <div className="chips">
+          <span className="chip gray">{daysBetween(room.startDate, room.endDate)}일</span>
+          <span className="chip gray">{room.members.filter((m) => m.submitted).length}명 제출</span>
+          <span className="chip gray">{room.places.length}곳 후보</span>
+          <span className="chip">{room.transportMode === 'transit' ? '대중교통' : '자차'}</span>
+          <span className="chip accent">{room.dailyEnd} 해산</span>
+        </div>
+      </div>
+
+      {!isHost && <p className="muted center">대표자 화면에서 계산이 끝나면 자동으로 넘어갑니다.</p>}
+    </Screen>
+  );
+}
