@@ -48,6 +48,7 @@ async def refine_day(
     request: OptimizeRequest,
     routing: RoutingService,
     anchors: tuple[Location, Location] | int | None = None,
+    time_bounds: tuple[int, int] | None = None,
     day_index: int | None = None,
 ) -> SimulatedDay | None:
     settings = request.settings
@@ -60,8 +61,10 @@ async def refine_day(
     else:
         origin, terminus = (settings.start_location, settings.end_location)
 
-    cursor = time_to_minutes(settings.start_time)
-    deadline = time_to_minutes(settings.end_deadline)
+    cursor, deadline = time_bounds or (
+        time_to_minutes(settings.start_time),
+        time_to_minutes(settings.end_deadline),
+    )
     previous = origin
     total_time = 0
     total_cost = 0
@@ -170,8 +173,8 @@ async def optimize_trip_precise(
     try:
         precise_per_day: list[list[SimulatedDay]] = []
         limit = routing.candidates_per_objective
-        for bucket, candidates, day_anchors in zip(
-            search.buckets, search.per_day, search.anchors, strict=True
+        for bucket, candidates, day_anchors, bounds in zip(
+            search.buckets, search.per_day, search.anchors, search.time_bounds, strict=True
         ):
             time_candidates = sorted(candidates, key=time_rank)[:limit]
             cost_candidates = sorted(candidates, key=cost_rank)[:limit]
@@ -186,7 +189,7 @@ async def optimize_trip_precise(
             for candidate in selected:
                 order = tuple(places_by_id[place_id] for place_id in candidate.order)
                 try:
-                    result = await refine_day(order, request, routing, day_anchors)
+                    result = await refine_day(order, request, routing, day_anchors, bounds)
                 except RoutingNoRoute:
                     continue
                 if result is not None:

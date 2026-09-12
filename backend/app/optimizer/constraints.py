@@ -48,6 +48,7 @@ def simulate_day(
     order: tuple[Place, ...],
     settings: TripSettings,
     anchors: tuple[Location, Location] | int | None = None,
+    time_bounds: tuple[int, int] | None = None,
     day_index: int | None = None,
 ) -> SimulatedDay | None:
     """Walk one day in order. `anchors` is where that day begins and ends, which
@@ -62,8 +63,10 @@ def simulate_day(
         origin, terminus = (settings.start_location, settings.end_location)
 
     mode = settings.transport_mode
-    cursor = time_to_minutes(settings.start_time)
-    deadline = time_to_minutes(settings.end_deadline)
+    cursor, deadline = time_bounds or (
+        time_to_minutes(settings.start_time),
+        time_to_minutes(settings.end_deadline),
+    )
     previous = origin
     total_time = 0
     total_cost = 0

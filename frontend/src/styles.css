@@ -314,6 +314,12 @@ button:not(:disabled):active { filter: brightness(.96); }
   flex-direction: column;
   gap: 14px;
 }
+.place-time-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+}
 .item.draggable:active { cursor: grabbing; }
 .item.draggable:focus-visible {
   outline: 2px solid var(--brand);
@@ -580,11 +586,37 @@ button:not(:disabled):active { filter: brightness(.96); }
 }
 .add-stay { border-style: dashed; color: var(--brand); }
 
-/* Setup pages share one local form; this keeps short steps visually balanced. */
+/* Setup pages share one viewport-aware frame: header/progress and actions stay put,
+   while only genuinely tall step content scrolls. */
+.setup-app { height: min(760px, calc(100dvh - 32px)); }
+.setup-screen-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0;
+}
+.setup-progress {
+  flex: none;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--line);
+}
+.setup-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand);
+  transition: width .18s ease;
+}
 .setup-step-shell {
-  min-height: min(470px, calc(100vh - 210px));
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
+  overflow-y: auto;
+  padding-bottom: 12px;
+  overscroll-behavior: contain;
 }
 .setup-step-shell > .card { width: 100%; }
 .setup-error { margin: 0; }
@@ -602,7 +634,28 @@ button:not(:disabled):active { filter: brightness(.96); }
 }
 
 @media (max-width: 520px) {
-  .setup-step-shell { min-height: calc(100vh - 205px); }
+  .page:has(.setup-app) { padding: 16px; }
+  .setup-app { height: calc(100dvh - 32px); }
+}
+
+/* The same editor is inline on desktop and becomes a focused, near-full-screen
+   surface on phones. Its time wheels remain inside this one scrolling surface. */
+@media (max-width: 640px) {
+  .item-expand {
+    position: fixed;
+    z-index: 100;
+    inset: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    margin: 0;
+    padding: 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-shell);
+    background: var(--shell);
+    box-shadow: 0 18px 48px rgba(31, 38, 55, 0.28);
+  }
+  .item-expand .place-editor { min-height: calc(100dvh - 66px); }
 }
 
 /* The row that follows the finger during a drag. It is a copy, so it carries no

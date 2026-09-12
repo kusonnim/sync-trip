@@ -37,6 +37,13 @@ def test_multi_day_route_has_chronological_dates_and_aggregate_totals():
     assert route["total_cost"] == sum(day["total_cost"] for day in route["days"])
 
 
+def test_multi_day_return_clock_before_first_day_arrival_remains_feasible():
+    result = optimize_trip(
+        request([], end_date="2026-09-20", start_time="10:00", end_deadline="09:00")
+    )
+    assert result.status == "success"
+
+
 def test_every_candidate_appears_exactly_once_in_each_route():
     places = [place(str(index), lat=37 + index / 100) for index in range(5)]
     result = response_dict(optimize_trip(request(places, end_date="2026-09-20")))

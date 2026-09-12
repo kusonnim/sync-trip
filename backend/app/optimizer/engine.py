@@ -37,6 +37,7 @@ class Track1Search:
     per_day: list[list[SimulatedDay]]
     # Where each day begins and ends, so a middle day runs between accommodations.
     anchors: list[tuple[Location, Location]]
+    time_bounds: list[tuple[int, int]]
 
 
 def build_route_option(
@@ -87,13 +88,14 @@ def run_track1_search(request: OptimizeRequest) -> Track1Search | OptimizeErrorR
             )
 
     anchors = request.settings.day_anchors()
+    time_bounds = request.settings.day_time_bounds()
     per_day: list[list[SimulatedDay]] = []
-    for bucket, day_anchors in zip(buckets, anchors, strict=True):
+    for bucket, day_anchors, bounds in zip(buckets, anchors, time_bounds, strict=True):
         ordered_places = sorted(bucket, key=lambda place: place.place_id)
         candidates = [
             result
             for order in permutations(ordered_places)
-            if (result := simulate_day(order, request.settings, day_anchors)) is not None
+            if (result := simulate_day(order, request.settings, day_anchors, bounds)) is not None
         ]
         if not candidates:
             return OptimizeErrorResponse(
@@ -102,7 +104,13 @@ def run_track1_search(request: OptimizeRequest) -> Track1Search | OptimizeErrorR
             )
         per_day.append(candidates)
 
-    return Track1Search(dates=dates, buckets=buckets, per_day=per_day, anchors=anchors)
+    return Track1Search(
+        dates=dates,
+        buckets=buckets,
+        per_day=per_day,
+        anchors=anchors,
+        time_bounds=time_bounds,
+    )
 
 
 def build_track1_response(search: Track1Search) -> OptimizeSuccessResponse:

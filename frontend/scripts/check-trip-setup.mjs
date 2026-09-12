@@ -27,7 +27,8 @@ assert.deepEqual(getSetupStepReadiness({ form, origin, destination, staysReady: 
 const invalidCases = [
   { form: { ...form, title: ' ' }, origin, destination, staysReady: true },
   { form: { ...form, endDate: '2026-09-30' }, origin, destination, staysReady: true },
-  { form: { ...form, dailyEnd: '09:00' }, origin, destination, staysReady: true },
+  { form: { ...form, startDate: '2026-10-01', endDate: '2026-10-01', dailyEnd: '09:00' },
+    origin, destination, staysReady: true },
   { form: { ...form, headcount: 13 }, origin, destination, staysReady: true },
   { form, origin: null, destination, staysReady: true },
   { form, origin, destination, staysReady: false },
@@ -35,6 +36,10 @@ const invalidCases = [
 invalidCases.forEach((input, index) => {
   assert.equal(getSetupStepReadiness(input)[index], false, `step ${index + 1} rejects invalid data`);
 });
+assert.equal(getSetupStepReadiness({
+  form: { ...form, dailyStart: '10:00', dailyEnd: '09:00' },
+  origin, destination, staysReady: true,
+})[2], true, 'multi-day arrival and return times are not compared as one day');
 
 const multiDay = buildRoomMeta({ form, origin, destination, nights: 2,
   filledStays: [hotelA, hotelB] });
@@ -54,6 +59,8 @@ assert.match(component, /if \(step < TRIP_SETUP_STEPS\.length\).*setStep/);
 assert.match(component, /else submit\(\)/);
 assert.equal((component.match(/await createRoom\(/g) ?? []).length, 1);
 assert.match(component, /navigate\(`\/r\/\$\{room\.code\}`\)/);
+assert.match(component, /role="progressbar"/);
+assert.match(component, /aria-valuenow=\{step\}/);
 assert.match(styles, /\.participant-field\s*\{[^}]*align-items:\s*center/);
 assert.match(styles, /\.participant-picker\s*\{[^}]*margin-inline:\s*auto/);
 assert.match(styles, /\.participant-picker \.wheel\s*\{[^}]*border:\s*0/);
