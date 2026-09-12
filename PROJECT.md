@@ -31,11 +31,11 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the final MVP connects the React/Vite frontend to Firestore room synchronization
-and the FastAPI backend. Production uses explicit `firestore` and `backend` modes; an explicit
-`mock` mode remains available for local demos. The backend provides the health check, Kakao Local
-search, Google Places business hours, Track 1 optimization, and bounded Track 2 refinement through
-Kakao Mobility or ODsay.
+**Build status:** the final MVP connects the React/Vite frontend to Supabase PostgreSQL and Realtime
+for collaborative state, while FastAPI remains responsible for provider proxying and optimization.
+Production uses explicit `supabase` and `backend` modes; an explicit `mock` mode remains available
+for local demos. The backend provides Kakao Local search, Google Places business hours, Track 1
+optimization, and bounded Track 2 refinement through Kakao Mobility or ODsay.
 
 ```text
 📦 SyncTrip
@@ -48,7 +48,8 @@ Kakao Mobility or ODsay.
  ┃ ┃ ┣ 📂 components/        # Timeline, RouteCard, ConflictNotice
  ┃ ┃ ┗ 📂 lib/
  ┃ ┃   ┣ 📜 api.js           # Backend communication (fetch)
- ┃ ┃   ┣ 📜 roomStore.js     # Firestore room state, listeners, votes, and optimization lock
+ ┃ ┃   ┣ 📜 roomStore.js     # Stable facade over Supabase or explicit local mock state
+ ┃ ┃   ┣ 📜 supabaseRoomStore.js # PostgreSQL RPCs and one Realtime channel per room
  ┃ ┃   ┣ 📜 preference.js    # Borda scoring and candidate selection
  ┃ ┃   ┗ 📜 mockOptimize.js  # Explicit local/demo optimizer fallback
  ┃ ┣ 📂 scripts/
@@ -70,6 +71,27 @@ Kakao Mobility or ODsay.
 
 CORS: open the Vercel frontend origin on the FastAPI side before anything else. This is the single
 most common thing to break late in a hackathon.
+
+### Collaborative PostgreSQL Model
+
+`rooms` uses an internal UUID primary key and a separate unique four-character code. Its child
+tables are `room_members`, `room_places`, `room_preferences`, `room_routes`, `room_errors`, and
+`room_final_votes`. Every child has a foreign key to `rooms(id)` with `ON DELETE CASCADE`.
+Composite primary keys enforce one member, place, ranking, and final vote per relevant room key.
+Nested optimizer routes and structured errors remain JSONB because their shape is already defined
+by the API contract.
+
+The browser keeps a stable random member ID and a per-room host token. PostgreSQL stores only the
+host-token digest in a private, non-published table. All mutations use narrow RPCs; browser roles
+have read-only table access for Realtime. `acquire_optimization_lock` atomically verifies the host,
+uses database time for a two-minute stale threshold, and stores a UUID nonce. Completion/failure
+RPCs require that same nonce, so an abandoned run cannot overwrite a recovered one.
+
+One Supabase Realtime channel watches the seven room tables. Every room-scoped change coalesces into
+one `get_room_snapshot` RPC, producing a coherent camelCase view for the existing screens. RLS is
+enabled on every table, but the accountless design cannot prove ownership of a client-generated
+member ID and read access needed for anonymous Realtime is not private. Supabase Auth or a trusted
+persistence backend is required before storing sensitive data.
 
 ---
 

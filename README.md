@@ -1,30 +1,55 @@
 # SyncTrip
 
-SyncTrip is a multi-user travel planner that combines ranked group preferences with business hours and reservation constraints. It produces a fastest itinerary and a lowest-cost itinerary, then lets the group vote on the final route.
+SyncTrip is a multi-user travel planner that combines ranked group preferences with business hours and reservation constraints. It produces fastest and lowest-cost itineraries, then lets the group vote on the final route.
 
-## MVP Architecture
+## Architecture
 
 ```text
-React / Vite frontend
-  ├─ Firebase Firestore: shared room state and realtime listeners
-  └─ FastAPI backend
+Browser (React + Vite)
+  ├─ Supabase
+  │    ├─ PostgreSQL: collaborative room state
+  │    ├─ Realtime: room-scoped change notifications
+  │    └─ RLS + narrow RPCs: read policy and write invariants
+  └─ FastAPI
        ├─ Kakao Local and Google Places
        ├─ Track 1 bounded exhaustive optimization
        └─ Kakao Mobility or ODsay Track 2 refinement
 ```
 
-The production frontend uses Firestore across browsers and devices. Rooms move deterministically through `setup → collecting → analyzing → voting → confirmed`. Members, places, rankings, route results, optimization errors, and one vote per member are persisted separately to avoid whole-room overwrites.
+Rooms progress through `setup → collecting → analyzing → voting → confirmed`. Relational tables persist members, places, rankings, routes, errors, and one vote per member. The host acquires an atomic PostgreSQL optimization lock, calls FastAPI with one coherent room snapshot, and completes the run through a nonce-protected RPC.
+
+## Supabase Setup
+
+1. Create a Supabase project and copy its project URL and publishable key from the Connect dialog.
+2. Install the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started), authenticate, and apply the versioned migration:
+
+   ```bash
+   supabase link
+   supabase db push
+   ```
+
+3. Copy `frontend/.env.example` to `frontend/.env` and set:
+
+   ```dotenv
+   VITE_SYNC_MODE=supabase
+   VITE_API_MODE=backend
+   VITE_API_BASE=https://api.example.com
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   ```
+
+Never put a secret or service-role key in a `VITE_` variable. The migration enables RLS and Realtime publication for every collaborative table.
 
 ## Run Locally
 
-For an entirely local demo, create `frontend/.env` with:
+For a local demo without external persistence, use explicit mock modes:
 
 ```dotenv
 VITE_SYNC_MODE=mock
 VITE_API_MODE=mock
 ```
 
-Then run:
+Frontend:
 
 ```bash
 cd frontend
@@ -33,39 +58,44 @@ npm run dev
 npm run check
 npm run test:integration
 npm run build
+npm run lint
 ```
 
-For the backend:
+Backend:
 
 ```bash
 cd backend
 python -m pip install -r requirements.txt
+copy .env.example .env
 uvicorn app.main:app --reload
 pytest
 ```
 
-Copy the example environment files for real integration. Production should set `VITE_SYNC_MODE=firestore`, `VITE_API_MODE=backend`, `VITE_API_BASE`, and every `VITE_FIREBASE_*` value. Provider credentials remain backend-only.
+Provider keys and CORS configuration belong only in `backend/.env`. The backend can start and serve `/health` without provider credentials.
 
 ## Deployment
 
-- Frontend: deploy `frontend/` to Vercel. Its `vercel.json` preserves client-side routes on direct refresh.
-- Backend: build [backend/Dockerfile](backend/Dockerfile), expose `$PORT`, and use `/health`. [render.yaml](render.yaml) is an optional Render blueprint; the container is provider-neutral.
-- Firestore: deploy [firestore.rules](firestore.rules) for the selected Firebase project.
-- CORS: set `CORS_ORIGINS=https://<frontend-domain>,http://localhost:5173` on the backend. Wildcards are rejected.
+- Vercel: deploy `frontend/`; `vercel.json` handles direct SPA refreshes.
+- Supabase: link the production project and run `supabase db push` before the frontend rollout.
+- Render: use `render.yaml` or build `backend/Dockerfile`. Configure `CORS_ORIGINS=https://<frontend-domain>,http://localhost:5173`.
+
+No project IDs, deployment credentials, or secrets are committed.
 
 ## Accountless Security Boundary
 
-The MVP intentionally has no sign-in. A stable random browser-local member ID prevents names, email addresses, IP addresses, or fingerprinting from becoming identity. A random host token prevents accidental host actions in the UI and coordinates the optimizer, but it is client-side data and is not authentication.
+The MVP intentionally has no accounts or Supabase Auth. A random browser-local member ID is stable but forgeable, and display names are metadata only. The host token is kept in browser storage; PostgreSQL stores only its SHA-256 digest and requires it for host state changes and optimization writes.
 
-Firestore rules restrict paths, document shapes, types, sizes, immutable room ownership fields, and destructive operations. They cannot securely establish host or member authority without Firebase Authentication or a trusted write backend. Anyone who knows a room code may be able to read or mutate room data. Do not use this accountless design for sensitive trips; add authentication before production use with untrusted participants.
+RLS is enabled on all client-visible tables. Browser roles receive read-only table access for Realtime, while all mutations use narrowly scoped, schema-qualified RPCs with constraints and fixed `search_path`. This protects database invariants and keeps the host proof out of Realtime payloads, but it cannot prove which human owns a member ID. Accountless Realtime also means table rows readable to the publishable-key role are not private merely because the UI asks for a room code. Use Supabase Auth or a trusted persistence backend before storing sensitive trip information.
+
+Anonymous room creation and member RPCs can also be automated by anyone holding the publishable key. Apply project-level rate limits or abuse controls for a public deployment; authentication is required for durable per-user authorization.
 
 ## Documentation
 
-- [PROJECT.md](PROJECT.md): canonical API and optimizer contract
-- [docs/PRD.md](docs/PRD.md): product flow, data model, and MVP behavior
-- [frontend/README.md](frontend/README.md): Firestore schema, runtime modes, and frontend verification
-- [backend/README.md](backend/README.md): API, provider behavior, configuration, and deployment
+- [PROJECT.md](PROJECT.md): canonical API, relational state, and optimizer contract
+- [docs/PRD.md](docs/PRD.md): product flow and final MVP behavior
+- [frontend/README.md](frontend/README.md): runtime modes, room store, Realtime, and testing
+- [backend/README.md](backend/README.md): API, providers, configuration, and deployment
 
 ## Remaining MVP Limitations
 
-There are no accounts, maps, route polylines, result-image export, or full offline-first workflow. Route caching is process-local, day assignment is geographic, reservations cannot be pinned to a date, and `stay_time_max` does not allocate optional slack. Live Firebase, provider, and deployment behavior requires project credentials and must be verified separately from automated tests.
+There are no user accounts, maps, route polylines, image export, or full offline-first workflow. Realtime reconnects normally, but writes made while the database is unavailable surface as errors rather than forming an offline queue. Route caching is process-local, day assignment is geographic, reservations cannot be pinned to a date, and `stay_time_max` does not allocate optional slack. Live Supabase, provider, and deployment behavior requires credentials and separate verification.

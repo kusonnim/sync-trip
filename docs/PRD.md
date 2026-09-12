@@ -4,7 +4,7 @@
 
 This product definition combines three source materials: the original planning document, handwritten notes, and the user-flow diagram. [PROJECT.md](../PROJECT.md) is the canonical source for API contracts and algorithm behavior; if this document differs, follow PROJECT.md.
 
-The final MVP supports the complete ten-step flow with Firestore synchronization across browsers, a production-configurable FastAPI backend, Track 1 local optimization, and bounded Track 2 live routing refinement. Explicit mock modes remain available for local development.
+The final MVP supports the complete ten-step flow with Supabase PostgreSQL and Realtime synchronization across browsers, a production-configurable FastAPI backend, Track 1 local optimization, and bounded Track 2 live routing refinement. Explicit mock modes remain available for local development.
 
 **Problem:** Place links pile up in group chats without producing a finalized plan. Existing travel apps usually sort by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM.
 
@@ -20,7 +20,7 @@ The following decisions resolve inconsistencies among the source materials:
 | Trip length | Any number of days |
 | Routing | ODsay for public transit and Kakao Mobility for driving |
 | Place data | Kakao Local search plus Google Places business hours and manual overrides |
-| Stack | React on Vercel, Firestore, and Python FastAPI |
+| Stack | React on Vercel, Supabase PostgreSQL/Realtime, and Python FastAPI |
 | Development window | Nine hours |
 
 ---
@@ -36,7 +36,7 @@ The ten user-flow steps are grouped into six screens. Numbers in parentheses ref
 5. **Optimization** (6) — Display progress for preference scoring, candidate selection, day assignment, and route optimization.
 6. **Compare and confirm** (7, 8, 9, 10) — Show a fastest-route card and a lowest-cost-route card. Expanding a card reveals the daily timelines. Each member casts one vote; the host confirms the winner and receives a shareable link. Maps are not implemented.
 
-Room state uses five values: `setup → collecting → analyzing → voting → confirmed`. Subscribing to Firestore's `status` field will synchronize screen transitions for every member.
+Room state uses five values: `setup → collecting → analyzing → voting → confirmed`. A room-scoped Supabase Realtime channel synchronizes every state transition.
 
 ### Picks per Person
 
@@ -54,42 +54,22 @@ Required places are always included. Fill the remaining `S - requiredCount` slot
 
 ## 2. Data Model
 
-The implemented Firestore structure uses a room document and independently writable subcollections. Firestore paths must alternate collections and documents, so routes and errors use a singleton `current` document.
+The implemented Supabase schema models room state relationally:
 
 ```text
-rooms/{roomCode}                      // Four uppercase letters or digits
-  status, title, hostToken
-  startDate, endDate, dailyStart, dailyEnd
-  headcount, transportMode            // 'car' | 'transit'
-  origin {name, lat, lng}
-  destination {name, lat, lng}
-  createdAt
-
-rooms/{roomCode}/members/{memberId}
-  nickname, joinedAt, submitted
-
-rooms/{roomCode}/places/{placeId}
-  name, lat, lng, category, kakaoId, address
-  isFixed                             // Whether this is a required place
-  addedBy
-  openTime, closeTime                 // 'HH:mm', Google Places or category defaults
-  hoursSource                         // 'google' | 'default' | 'manual'
-  fixedTime                           // Reservation time; hard constraint
-  bestTime                            // Soft constraint
-  minStay, maxStay                    // Minutes
-
-rooms/{roomCode}/preferences/{memberId}
-  ranking: [placeId, ...]             // Ordered from first choice
-
-rooms/{roomCode}/routes/current        // Store the /api/optimize routes array as-is
-  [{ type, label, total_time, total_cost, days: [{ date, timeline: [...] }] }]
-
-rooms/{roomCode}/errors/current        // Present only when optimization fails
-  { code, message, placeIds }
-
-rooms/{roomCode}/finalVotes/{memberId}
-  routeId
+rooms                     UUID primary key; unique four-character code; trip and lifecycle fields
+room_members              PK (room_id, member_id); nickname, host marker, submission state
+room_places               PK (room_id, place_id); normalized coordinates, hours, stays, constraints
+room_preferences          PK (room_id, member_id); ordered ranking JSONB
+room_routes               PK room_id; optimization nonce and nested route JSONB
+room_errors               PK room_id; optimization nonce and structured error fields
+room_final_votes          PK (room_id, member_id); one current route vote
 ```
+
+Every child references `rooms(id)` with `ON DELETE CASCADE`. PostgreSQL check constraints validate
+lifecycle values, room codes, transport modes, coordinates, stay bounds, JSON shapes, and vote
+types. Room creation relies on the database unique constraint and retries a `23505` collision.
+Ranking and voting use conflict-aware replacement, never local counters or whole-room overwrites.
 
 A `timeline` entry has the same shape as PROJECT.md section 4.3:
 
@@ -100,7 +80,7 @@ A `timeline` entry has the same shape as PROJECT.md section 4.3:
   "time": "14:20 ~ 15:20", "stay_duration": 60, "wait_duration": 0 }
 ```
 
-For security, keep Kakao, ODsay, and Google keys only on the FastAPI server. The frontend contains only Firebase web configuration. Never expose external API keys through Vite's `VITE_` prefix.
+For security, keep Kakao, ODsay, and Google keys only on the FastAPI server. The frontend contains only the Supabase project URL and publishable key. Never expose provider or Supabase service-role keys through Vite.
 
 ---
 
@@ -192,7 +172,7 @@ This pairwise check is O(m²), much cheaper than permutation search, so run it *
 | Kakao Mobility Directions | Driving routes, distance, and tolls | Within free allowance |
 | ODsay | Public-transit routes, transfers, and fares | 1,000 free requests per day |
 | Google Places | Business hours | **Billing account required; charges may apply above the allowance** |
-| Firebase | Real-time synchronization | Free Spark plan |
+| Supabase | PostgreSQL and Realtime room synchronization | Subject to the selected project plan |
 
 Google Places is the only planned API that may incur direct charges. During development, use saved response fixtures. Before making live calls, state the expected request count and cost and obtain approval. Without approval, use category defaults and manual entry and report that fallback.
 
@@ -210,11 +190,11 @@ Category defaults when Google data is unavailable:
 
 ## 6. Final MVP Integration
 
-Production uses `VITE_SYNC_MODE=firestore`, `VITE_API_MODE=backend`, `VITE_API_BASE`, and the Firebase web variables. Local/demo operation must explicitly select `mock`; it is never an implicit production fallback. Firestore persists independently writable member, place, preference, route, error, and vote documents and realtime listeners synchronize every screen transition.
+Production uses `VITE_SYNC_MODE=supabase`, `VITE_API_MODE=backend`, `VITE_API_BASE`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_PUBLISHABLE_KEY`. Local/demo operation must explicitly select `mock`; it is never an implicit production fallback. PostgreSQL persists independently constrained member, place, preference, route, error, and vote rows, while one room-scoped Realtime channel synchronizes every screen transition.
 
-Only the host UI transitions into `analyzing`. It then claims a Firestore transaction lock using `optimizationState`, `optimizationOwner`, `optimizationStartedAt`, and a random run nonce. The client-side host token prevents accidental actions but is not secure authentication. A two-minute stale threshold allows a refreshed host to recover an abandoned run, while nonce validation prevents the abandoned request from later overwriting the recovered result. Success and error artifacts persist before the room enters `voting`.
+Only the host UI transitions into `analyzing`. It then calls `acquire_optimization_lock`, which atomically checks the hashed host proof and current state, uses database time for a two-minute stale threshold, and writes an owner plus UUID nonce. Completion and failure RPCs require that nonce, preventing an abandoned request from overwriting a recovered run. Success and error artifacts persist before the room enters `voting`.
 
-The accountless security rules validate room codes, field sets, types, sizes, immutable ownership fields, and allowed document paths. Without Firebase Authentication or trusted backend writes, they cannot securely distinguish a host or member. Anyone with a room code is inside the MVP trust boundary; sensitive deployment requires authentication.
+RLS is enabled on every table. Browser roles have read-only table grants required for Realtime; all writes use narrow security-definer RPCs with empty search paths and schema-qualified objects. The host digest is private and excluded from Realtime. Without Supabase Auth, the database cannot securely distinguish the human owner of a client-generated member ID, and anonymous read policies do not make rows private. Sensitive deployment requires authentication or trusted persistence.
 
 ### Completed
 
@@ -229,7 +209,7 @@ The accountless security rules validate room codes, field sets, types, sizes, im
 - Phase 2 Track 1 backend optimizer and `POST /api/optimize`
 - Deterministic day assignment, exhaustive permutation search, constraint simulation, and conflict diagnosis
 - Phase 3 cached Kakao Mobility and ODsay adapters with bounded precise-candidate refinement
-- Firestore realtime synchronization with document-level concurrent writes
+- Supabase Realtime synchronization with relational PostgreSQL constraints
 - Transaction-guarded single-owner optimization and persisted routes/errors
 - Per-member vote replacement and persisted confirmed route
 - Mocked room-store integration and frontend/backend contract checks

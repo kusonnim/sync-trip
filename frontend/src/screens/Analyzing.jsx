@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Screen from '../components/Screen';
 import { optimize, buildOptimizeBody } from '../lib/api';
-import { claimOptimization, finishOptimization } from '../lib/roomStore';
+import { claimOptimization, finishOptimization, readRoom } from '../lib/roomStore';
 import { picksPerPerson, scorePlaces, pickCandidates } from '../lib/preference';
 import { daysBetween } from '../lib/time';
 
@@ -22,6 +22,7 @@ export default function Analyzing({ room, me, isHost }) {
 
     (async () => {
       const currentRoom = snapshot.current;
+      let optimizationRoom = currentRoom;
       let runId;
       try {
         runId = await claimOptimization(currentRoom.code, me.id);
@@ -29,18 +30,20 @@ export default function Analyzing({ room, me, isHost }) {
           setError('Optimization is already running in another host tab. This room will advance when it finishes.');
           return;
         }
+        optimizationRoom = await readRoom(currentRoom.code);
+        if (!optimizationRoom) throw new Error('Room not found.');
       } catch {
-        setError('Could not acquire the optimization lock. Refresh to retry if the host disconnected.');
+        setError('Could not acquire the optimization lock or refresh the room snapshot. Refresh to retry if the host disconnected.');
         return;
       }
-      const dayCount = daysBetween(currentRoom.startDate, currentRoom.endDate);
-      const k = picksPerPerson(dayCount, currentRoom.headcount);
-      const scored = scorePlaces(currentRoom.places, currentRoom.preferences, k);
+      const dayCount = daysBetween(optimizationRoom.startDate, optimizationRoom.endDate);
+      const k = picksPerPerson(dayCount, optimizationRoom.headcount);
+      const scored = scorePlaces(optimizationRoom.places, optimizationRoom.preferences, k);
       const candidates = pickCandidates(scored, dayCount);
 
       let result;
       try {
-        result = await optimize(buildOptimizeBody(currentRoom, candidates));
+        result = await optimize(buildOptimizeBody(optimizationRoom, candidates));
       } catch {
         result = { status: 'error', code: 'REQUEST_FAILED', message: 'The optimization service is unavailable. Check the backend configuration and try again.', place_ids: [] };
       }

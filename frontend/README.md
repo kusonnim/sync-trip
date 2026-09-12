@@ -1,66 +1,79 @@
 # SyncTrip Frontend
 
-The React/Vite frontend implements the ten-step group-planning flow and synchronizes production rooms through Firebase Firestore.
+The React/Vite frontend implements the ten-step planning flow. Production collaborative state lives in Supabase PostgreSQL and updates through Supabase Realtime; components continue to depend only on `src/lib/roomStore.js`.
 
-## Runtime Modes
+## Configuration
 
-Modes are explicit so production cannot silently become a local demo:
+Production:
 
 ```dotenv
-# Production
-VITE_SYNC_MODE=firestore
+VITE_SYNC_MODE=supabase
 VITE_API_MODE=backend
 VITE_API_BASE=https://api.example.com
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+```
 
-# Local/demo alternative
+Local/demo:
+
+```dotenv
 VITE_SYNC_MODE=mock
 VITE_API_MODE=mock
 ```
 
-`firestore` mode requires all `VITE_FIREBASE_*` values in `.env.example`. Firebase web configuration is intentionally public. Never place Kakao, Google Places, Kakao Mobility, or ODsay credentials in a `VITE_` variable.
+Production never silently falls back to mock mode. The publishable key is intended for browser clients and is constrained by database grants, RLS, and RPC validation. Never expose a service-role key or any Kakao, Google, or ODsay credential through Vite.
 
-## Shared Room Model
+## Room Store
 
-`src/lib/roomStore.js` keeps the screen-facing API stable and uses modular Firebase operations. The persisted paths are:
+- `roomStore.js` is the stable screen-facing facade.
+- `supabaseRoomStore.js` implements PostgreSQL RPCs and Realtime.
+- `mockRoomStore.js` is the explicit local/demo implementation.
+- `roomIdentity.js` owns the opaque browser member ID and per-room host token.
+- `supabase.js` initializes one official `@supabase/supabase-js` client.
+
+The SQL migration defines:
 
 ```text
-rooms/{roomCode}
-rooms/{roomCode}/members/{memberId}
-rooms/{roomCode}/places/{placeId}
-rooms/{roomCode}/preferences/{memberId}
-rooms/{roomCode}/routes/current
-rooms/{roomCode}/errors/current
-rooms/{roomCode}/finalVotes/{memberId}
+rooms
+room_members
+room_places
+room_preferences
+room_routes
+room_errors
+room_final_votes
 ```
 
-Firestore requires alternating collection/document path segments, so `current` is the document ID for the singleton routes and error artifacts. Subcollection writes prevent one participant from overwriting another's places, ranking, or vote. Server timestamps are used in Firestore mode.
+Each child table references `rooms(id)` with cascading deletion. Composite primary keys enforce one member, place, preference, or vote per room identity. Routes and errors store the nested optimizer payload as JSONB and record the optimization nonce.
 
-Room subscriptions compose realtime snapshots for the room and its subcollections, emit only after the initial set is complete, and return one cleanup function that disposes every listener. Local storage is used only when `VITE_SYNC_MODE=mock`.
+## Realtime and Snapshots
 
-The browser receives one opaque random member ID stored locally and reuses it across rooms. Names are display-only. The creator also receives a per-room host token. The host claims a Firestore transaction lock and random run nonce before calling `/api/optimize`; a two-minute stale threshold permits recovery after an abandoned request. Results or structured errors are committed only if that nonce still owns the lock, then the room advances to voting.
+One channel registers seven room-filtered Postgres Changes bindings. A change schedules a coalesced `get_room_snapshot` RPC, which reconstructs the entire camelCase UI model in one database statement. This avoids polling, duplicate channels, and mixed-version settings/place/preference reads. Disposing the store subscription clears pending refreshes and removes the channel.
 
-The host token protects against accidental duplicate actions, not malicious users. It is readable client data, and the accountless Firestore rules cannot securely enforce host-only authority. Anyone with a room code falls within the MVP trust boundary.
+The migration adds all seven tables to `supabase_realtime` and uses `replica identity full` so deletion events retain identifying fields. Normal Supabase reconnect behavior is used; the app does not implement a competing offline synchronization layer.
+
+## Mutations and Optimization
+
+Browser roles cannot directly insert, update, or delete collaborative rows. Narrow RPCs handle room creation, member upsert, places, ranking replacement, vote upsert, and host state transitions.
+
+`acquire_optimization_lock` uses database time and an atomic conditional update. It rejects simultaneous owners and permits recovery after two minutes. `complete_optimization` and `fail_optimization` require the same host proof, owner, and UUID nonce. A stale request therefore cannot overwrite a recovered run.
+
+Room codes retain the four-character alphabet and have a database `UNIQUE` constraint. The client retries a PostgreSQL `23505` collision with a new code.
+
+## Security Boundary
+
+This MVP intentionally does not use Supabase Auth. The host token is hashed in a private, non-published table and meaningfully protects host RPCs from accidental or code-only access. Member IDs remain client-generated and forgeable, and read policies needed for accountless Realtime do not make room data private from someone using the publishable key directly. Add authentication before handling sensitive data or untrusted participants.
+
+The publishable key also permits anonymous room creation and member RPC calls, so a public deployment needs project-level rate limits or equivalent abuse controls even when the stored trip data is non-sensitive.
 
 ## Backend Contract
 
-`src/lib/api.js` is the camelCase-to-snake_case boundary:
+Backend mode requires `VITE_API_BASE` and uses:
 
 - `GET /api/search?keyword=`
 - `GET /api/place/details?name=`
 - `POST /api/optimize`
 
-Backend mode requires `VITE_API_BASE`. Mock mode uses `mockPlaces.js` and `mockOptimize.js`. Place-hours failures leave editable category defaults in place and show a concise warning. Network and synchronization actions expose loading, disabled, and failure states without provider payloads or stack traces.
-
-## Screens
-
-| Status | Screen | Step |
-|---|---|---:|
-| — | `Landing`, `TripSetup` | 1–2 |
-| `setup` | `RoomLobby` / `JoinRoom` | 3–4 |
-| `collecting` | `PlacePicker` | 5 |
-| `analyzing` | `Analyzing` | 6 |
-| `voting` | `Result` or conflict correction | 7–9 |
-| `confirmed` | persisted winning `Result` | 10 |
+`api.js` remains the single camelCase-to-snake_case contract boundary. Mock mode uses `mockPlaces.js` and `mockOptimize.js`.
 
 ## Verification
 
@@ -72,6 +85,4 @@ npm run build
 npm run lint
 ```
 
-`test:integration` exercises both the local adapter and the production Firestore adapter through a deterministic mock of Firebase's modular SDK. It covers room creation/join, stable member registration, places, preferences, state changes, result/error persistence, vote replacement, confirmation, disposal of all seven listeners, duplicate optimization prevention, and the optimize request contract. It does not access a real Firebase project.
-
-The remaining frontend non-goals are maps, route polylines, image export, authentication, and a full offline-first experience.
+The integration script runs without a production project. It exercises the Supabase adapter through deterministic RPC and Realtime mocks, including room-code collision retry, member and vote upserts, coherent refresh, cleanup, simultaneous lock rejection, stale recovery, and stale-result rejection. It also audits the migration for tables, RLS, nonce checks, fixed function search paths, and Realtime publication.

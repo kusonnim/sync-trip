@@ -178,7 +178,7 @@ Authentication failures, rate limits, timeouts, malformed responses, missing con
 - Routing cache is process-local and is cleared on restart.
 - ODsay English output depends on the configured provider plan and service region.
 - `stay_time_max` is not used to extend visits with spare schedule slack.
-- Firestore is owned by the frontend; this stateless backend does not authenticate Firestore users.
+- Supabase PostgreSQL and Realtime are owned by the frontend; this stateless backend does not access collaborative persistence.
 - Maps and image export are not included.
 - Live provider behavior requires valid keys and provider-console configuration; automated tests validate adapters with mocked responses.
 
