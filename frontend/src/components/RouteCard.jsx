@@ -2,8 +2,8 @@ import { durationText, won, dateLabel } from '../lib/time';
 import Timeline from './Timeline';
 
 const TONE = {
-  min_time: { chip: 'chip', mark: '최소 시간' },
-  min_cost: { chip: 'chip accent', mark: '최소 비용' },
+  min_time: { name: '최소 시간', tag: '추천', color: 'var(--brand)', tint: 'var(--brand-soft)' },
+  min_cost: { name: '최소 비용', tag: '알뜰', color: 'var(--accent)', tint: 'var(--accent-soft)' },
 };
 
 function countPlaces(route) {
@@ -16,41 +16,47 @@ function countPlaces(route) {
 
 export default function RouteCard({ route, open, onToggle, votes, onVote, myVote }) {
   const tone = TONE[route.type] ?? TONE.min_time;
+  const picked = myVote === route.type;
+
   return (
-    <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className={tone.chip}>{route.label ?? tone.mark}</span>
-        {votes !== undefined && <span className="chip gray">{votes}표</span>}
-        <button className="btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={onToggle}>
-          {open ? '접기' : '일정 보기'}
-        </button>
+    <div className="card" style={{ gap: 14, borderColor: picked ? tone.color : 'var(--line)' }}>
+      <div className="card-head" style={{ alignItems: 'center' }}>
+        <div className="card-title" style={{ color: tone.color }}>{route.label ?? tone.name}</div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          {votes !== undefined && <span className="chip gray">{votes}표</span>}
+          <span className="tag" style={{ background: tone.tint, color: tone.color }}>{tone.tag}</span>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
-        <div>
-          <div className="tl-note">총 이동</div>
-          <div style={{ fontWeight: 700 }}>{durationText(route.total_time)}</div>
+      <div className="stats">
+        <div className="stat">
+          <span className="label">이동 시간</span>
+          <span className="value">{durationText(route.total_time)}</span>
         </div>
-        <div>
-          <div className="tl-note">예상 교통비</div>
-          <div style={{ fontWeight: 700 }}>{won(route.total_cost)}</div>
+        <div className="stat">
+          <span className="label">예상 요금</span>
+          <span className="value">{won(route.total_cost)}</span>
         </div>
-        <div>
-          <div className="tl-note">방문</div>
-          <div style={{ fontWeight: 700 }}>{countPlaces(route)}곳</div>
+        <div className="stat">
+          <span className="label">장소</span>
+          <span className="value">{countPlaces(route)}곳</span>
         </div>
         {route.total_wait > 30 && (
-          <div>
-            <div className="tl-note">대기</div>
-            <div style={{ fontWeight: 700, color: 'var(--warn)' }}>{durationText(route.total_wait)}</div>
+          <div className="stat">
+            <span className="label">대기</span>
+            <span className="value warn">{durationText(route.total_wait)}</span>
           </div>
         )}
       </div>
 
+      <button className="btn-outline" onClick={onToggle}>
+        {open ? '일정 접기' : '일정 보기'}
+      </button>
+
       {open && (
-        <div style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {route.days.map((day) => (
-            <div key={day.date} style={{ marginBottom: 18 }}>
+            <div key={day.date} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div className="card-title">{dateLabel(day.date)}</div>
               <Timeline timeline={day.timeline} />
             </div>
@@ -60,11 +66,15 @@ export default function RouteCard({ route, open, onToggle, votes, onVote, myVote
 
       {onVote && (
         <button
-          className={myVote === route.type ? 'btn-primary' : 'btn-ghost'}
-          style={{ width: '100%', marginTop: 12 }}
+          style={{
+            width: '100%',
+            border: 0,
+            background: picked ? tone.tint : tone.color,
+            color: picked ? tone.color : '#fff',
+          }}
           onClick={() => onVote(route.type)}
         >
-          {myVote === route.type ? '이 안에 투표함' : '이 안에 투표하기'}
+          {picked ? '이 안에 투표함' : '이 안에 투표하기'}
         </button>
       )}
     </div>

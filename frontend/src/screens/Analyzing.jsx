@@ -49,13 +49,15 @@ export default function Analyzing({ room, isHost }) {
     return () => clearInterval(ticker);
   }, [isHost, room]);
 
+  const dayCount = daysBetween(room.startDate, room.endDate);
+
   return (
-    <Screen step={6} title="의견을 취합하고 있어요" subtitle="잠시만 기다려 주세요">
-      <div className="card pad-lg">
+    <Screen title="의견을 취합하고 있어요" subtitle="잠시만 기다려 주세요">
+      <div className="card" style={{ gap: 14 }}>
         {STEPS.map((label, i) => (
           <div className={i < done ? 'progress-step done' : 'progress-step'} key={label}>
-            <span className="tick">✓</span>
-            {label}
+            <span className="tick">{i < done ? '✓' : i + 1}</span>
+            <span className="label">{label}</span>
           </div>
         ))}
       </div>
@@ -63,11 +65,11 @@ export default function Analyzing({ room, isHost }) {
       <div className="card">
         <div className="card-title">이번 계산에 쓰인 조건</div>
         <div className="chips">
-          <span className="chip gray">{daysBetween(room.startDate, room.endDate)}일</span>
-          <span className="chip gray">{room.members.filter((m) => m.submitted).length}명 제출</span>
-          <span className="chip gray">{room.places.length}곳 후보</span>
-          <span className="chip">{room.transportMode === 'transit' ? '대중교통' : '자차'}</span>
-          <span className="chip accent">{room.dailyEnd} 해산</span>
+          <span className="chip">{dayCount}일</span>
+          <span className="chip">{room.members.filter((m) => m.submitted).length}명</span>
+          <span className="chip">{room.transportMode === 'transit' ? '🚌 대중교통' : '🚗 자차'}</span>
+          <span className="chip">{room.dailyStart} 시작</span>
+          <span className="chip accent">{room.dailyEnd} 귀가 마감</span>
         </div>
       </div>
 

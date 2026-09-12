@@ -21,15 +21,11 @@ export default function RoomLobby({ room, isHost }) {
 
   return (
     <Screen
-      step={3}
       title="팀원을 기다리는 중"
       subtitle={room.title}
       footer={
         isHost ? (
-          <button
-            className="btn-primary"
-            onClick={() => patchRoom(room.code, { status: 'collecting' })}
-          >
+          <button className="btn-primary" onClick={() => patchRoom(room.code, { status: 'collecting' })}>
             {room.members.length < room.headcount
               ? `${room.members.length}명으로 먼저 시작하기`
               : '희망지 입력 시작하기'}
@@ -41,17 +37,21 @@ export default function RoomLobby({ room, isHost }) {
         )
       }
     >
-      <div className="card pad-lg center">
-        <div className="tl-note">방 코드</div>
+      <div className="card" style={{ alignItems: 'center', gap: 14, padding: '24px 18px' }}>
+        <div className="hint" style={{ fontWeight: 600 }}>방 코드</div>
         <div className="roomcode">{room.code}</div>
         <button className="btn-ghost" style={{ width: '100%' }} onClick={copy}>
-          {copied ? '링크를 복사했어요' : '🔗 초대 링크 복사'}
+          🔗 초대 링크 복사
         </button>
+        {copied && (
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--good)' }}>링크를 복사했어요</div>
+        )}
       </div>
 
       <div className="card">
-        <div className="card-title">
-          참여자 {room.members.length}명 / {room.headcount}명
+        <div className="card-head">
+          <div className="card-title">참여자</div>
+          <div className="count">{room.members.length} / {room.headcount}명 입장</div>
         </div>
         <div className="chips">
           {room.members.map((m) => (
@@ -60,13 +60,12 @@ export default function RoomLobby({ room, isHost }) {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ gap: 10 }}>
         <div className="card-title">이렇게 진행됩니다</div>
-        <p className="muted" style={{ margin: 0 }}>
-          모두 모이면 가고 싶은 곳을 <strong>얼마든지</strong> 담고, 그중에서
-          각자 <strong>{TOP_N}순위</strong>까지 고릅니다.
-          순위를 모아 점수가 높은 {SLOTS_PER_DAY * dayCount}곳만 남기고,
-          최소 시간과 최소 비용 두 가지 일정을 만들어 드립니다.
+        <p className="muted" style={{ lineHeight: 1.7 }}>
+          1. 각자 가고 싶은 곳을 담고 그중 {TOP_N}곳에 순위를 매깁니다.<br />
+          2. 1순위 3점, 2순위 2점, 3순위 1점으로 합산합니다.<br />
+          3. 점수가 높은 {SLOTS_PER_DAY * dayCount}곳만 남겨 두 가지 경로를 만들고, 투표로 하나를 확정합니다.
         </p>
       </div>
     </Screen>

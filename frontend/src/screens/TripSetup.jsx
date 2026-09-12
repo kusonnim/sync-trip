@@ -38,15 +38,14 @@ export default function TripSetup() {
 
   return (
     <Screen
-      step={2}
       title="여행 기본정보"
       subtitle="대표자가 먼저 입력합니다"
       footer={<button className="btn-primary" disabled={!ready} onClick={submit}>여행방 만들기</button>}
     >
-      <div className="card">
+      <div className="card" style={{ gap: 14 }}>
         <label className="field">
-          <span>내 닉네임</span>
-          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="예: 재은" />
+          <span>닉네임</span>
+          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="예: 민서" />
         </label>
         <label className="field">
           <span>여행 이름</span>
@@ -54,9 +53,9 @@ export default function TripSetup() {
         </label>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ gap: 14 }}>
         <div className="card-title">날짜와 시간</div>
-        <div className="row">
+        <div className="grid-2">
           <label className="field">
             <span>시작일</span>
             <input type="date" value={form.startDate} onChange={set('startDate')} />
@@ -65,56 +64,49 @@ export default function TripSetup() {
             <span>종료일</span>
             <input type="date" value={form.endDate} onChange={set('endDate')} min={form.startDate} />
           </label>
-        </div>
-        <div className="row">
           <label className="field">
             <span>하루 시작</span>
             <input type="time" value={form.dailyStart} onChange={set('dailyStart')} />
           </label>
           <label className="field">
-            <span>해산 시각</span>
+            <span>귀가 마감</span>
             <input type="time" value={form.dailyEnd} onChange={set('dailyEnd')} />
           </label>
         </div>
-        <p className="tl-note" style={{ margin: 0 }}>{dayCount}일 일정으로 계산합니다.</p>
+        <p className="hint">총 {dayCount}일 일정으로 계산됩니다.</p>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ gap: 14 }}>
         <div className="card-title">인원과 이동수단</div>
         <label className="field">
-          <span>인원수</span>
+          <span>인원</span>
           <input type="number" min={2} max={12} value={form.headcount} onChange={set('headcount')} />
         </label>
-        <label className="field">
-          <span>이동수단</span>
-          <div className="choice-group">
-            {[['transit', '🚌 대중교통'], ['car', '🚗 자차']].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className="choice"
-                aria-pressed={form.transportMode === value}
-                onClick={() => setForm({ ...form, transportMode: value })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </label>
+        <div className="choice-group">
+          {[['transit', '🚌 대중교통'], ['car', '🚗 자차']].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className="choice"
+              aria-pressed={form.transportMode === value}
+              onClick={() => setForm({ ...form, transportMode: value })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ gap: 14 }}>
         <div className="card-title">출발지와 도착지</div>
-        <div className="row">
-          <label className="field">
-            <span>출발지</span>
-            <input value={form.originName} onChange={set('originName')} />
-          </label>
-          <label className="field">
-            <span>최종 도착지</span>
-            <input value={form.destinationName} onChange={set('destinationName')} />
-          </label>
-        </div>
+        <label className="field">
+          <span>출발지</span>
+          <input value={form.originName} onChange={set('originName')} />
+        </label>
+        <label className="field">
+          <span>도착지</span>
+          <input value={form.destinationName} onChange={set('destinationName')} />
+        </label>
       </div>
     </Screen>
   );

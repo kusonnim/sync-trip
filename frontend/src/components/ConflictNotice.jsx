@@ -12,9 +12,11 @@ export default function ConflictNotice({ error, places = [] }) {
 
   return (
     <>
-      <div className="notice error">
-        <strong>{titles[error.code] ?? '일정을 만들지 못했습니다'}</strong>
-        <div style={{ marginTop: 4 }}>{error.message}</div>
+      <div className="card" style={{ gap: 8 }}>
+        <div className="card-title" style={{ color: 'var(--accent)' }}>
+          {titles[error.code] ?? '일정을 만들지 못했습니다'}
+        </div>
+        <p className="muted">{error.message}</p>
       </div>
       {named.length > 0 && (
         <div className="card">
