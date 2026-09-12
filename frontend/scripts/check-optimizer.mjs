@@ -200,6 +200,41 @@ const stopsOf = (route) =>
     res.routes[0].total_time === days.reduce((s, d) => s + d.total_time, 0));
 }
 
+// 6b. Fewer places than travel days still produces one day per date, and the last
+// day still ends at the arrival point rather than stopping at an accommodation.
+{
+  const places = [
+    place('a', 'Gyeongbokgung Palace', 'attraction', 37.5796, 126.9770),
+    place('b', 'Seoul Forest', 'attraction', 37.5443, 127.0374),
+  ];
+  const res = optimizeLocally({
+    settings: settings({ start_date: '2026-09-19', end_date: '2026-09-21' }),
+    places,
+  });
+  const days = res.status === 'success' ? res.routes[0].days : [];
+  const ends = days.map((d) => d.timeline.at(-1).name);
+  check('Every travel day appears even with fewer places than days', days.length === 3,
+    `${days.length}일 / 3일`);
+  check('The last day still returns to the arrival point',
+    ends.at(-1) === SEOUL.name, ends.join(' | '));
+  check('A day with nothing to visit still runs between its anchors',
+    days.length === 3 && days[1].timeline.at(0).name === HOTEL.name
+      && days[1].timeline.at(-1).name === HOTEL.name,
+    days.length === 3 ? `${days[1].timeline.at(0).name} → ${days[1].timeline.at(-1).name}` : '-');
+}
+
+// 6c. A trip with a night but no accommodation has no anchor for the middle days.
+{
+  const places = [place('a', 'Gyeongbokgung Palace', 'attraction', 37.5796, 126.9770)];
+  const res = optimizeLocally({
+    settings: settings({ start_date: '2026-09-19', end_date: '2026-09-20', accommodations: [] }),
+    places,
+  });
+  check('Say why a multi-day trip without an accommodation cannot be routed',
+    res.status === 'error' && res.code === 'NO_ROUTE' && res.message.includes('숙소'),
+    res.message ?? res.status);
+}
+
 // 7. Preference scoring. First choice 3, second 2, third 1, unranked 0.
 {
   const pool = ['a', 'b', 'c', 'd'].map((id) => ({ id, name: id.toUpperCase() }));

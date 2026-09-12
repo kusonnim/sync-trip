@@ -185,10 +185,16 @@ export function findConflicts(places, mode) {
 }
 
 // PROJECT.md section 5.0. Split by coordinates across trip days without exceeding daily capacity.
+// There is one bucket per travel day even when there are fewer places than days.
+// A day with nothing to visit still exists: it runs from that day's start anchor to
+// its end anchor, which is how a night at an accommodation stays in the itinerary.
 function splitByDay(places, dayCount) {
   if (dayCount <= 1) return [places];
+  const buckets = Array.from({ length: dayCount }, () => []);
+  if (!places.length) return buckets;
+
   const seeds = [places[0]];
-  while (seeds.length < dayCount) {
+  while (seeds.length < Math.min(dayCount, places.length)) {
     let best = null;
     let bestDist = -1;
     places.forEach((p) => {
@@ -199,14 +205,16 @@ function splitByDay(places, dayCount) {
     if (!best) break;
     seeds.push(best);
   }
+  seeds.forEach((seed, index) => buckets[index].push(seed));
 
-  const buckets = seeds.map((s) => [s]);
   const capacity = Math.max(1, Math.min(MAX_PER_DAY, Math.ceil(places.length / dayCount)));
   places
     .filter((p) => !seeds.includes(p))
     .forEach((p) => {
-      const ranked = buckets
-        .map((b, i) => ({ i, d: haversine(seeds[i], p) }))
+      // Rank against the seeds, not the buckets: a day without a seed has no
+      // coordinate to measure against.
+      const ranked = seeds
+        .map((seed, i) => ({ i, d: haversine(seed, p) }))
         .sort((a, b) => a.d - b.d);
       const target = ranked.find((r) => buckets[r.i].length < capacity) ?? ranked[0];
       buckets[target.i].push(p);
@@ -250,6 +258,14 @@ export function optimizeLocally(body) {
   }
 
   const dates = listDates(settings.start_date, daysBetween(settings.start_date, settings.end_date));
+  if (dates.length > 1 && !(settings.accommodations ?? []).length) {
+    return {
+      status: 'error',
+      code: 'NO_ROUTE',
+      message: '숙소가 없어 중간 날의 시작과 끝을 정할 수 없습니다. 여행 설정에서 숙소를 입력해 주세요.',
+      place_ids: [],
+    };
+  }
   const buckets = splitByDay([...places], dates.length);
   const ctx = {
     mode,
