@@ -55,6 +55,9 @@ export async function fetchPlaceHours(name) {
  * The UI uses camelCase and the backend accepts snake_case, so conversion happens only here.
  */
 export function buildOptimizeBody(room, candidates) {
+  const accommodations = room.accommodations?.length
+    ? room.accommodations
+    : (room.accommodation ? [room.accommodation] : (room.hotel ? [room.hotel] : []));
   return {
     settings: {
       transport_mode: room.transportMode,
@@ -65,7 +68,7 @@ export function buildOptimizeBody(room, candidates) {
       start_time: room.dailyStart,
       end_deadline: room.dailyEnd,
       // One accommodation per night, in order. One entry covers every night.
-      accommodations: room.accommodations ?? [],
+      accommodations,
     },
     places: candidates.map((p) => ({
       place_id: p.id,
