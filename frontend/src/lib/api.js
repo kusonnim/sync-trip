@@ -64,6 +64,8 @@ export function buildOptimizeBody(room, candidates) {
       end_location: room.destination,
       start_time: room.dailyStart,
       end_deadline: room.dailyEnd,
+      // One accommodation per night, in order. One entry covers every night.
+      accommodations: room.accommodations ?? [],
     },
     places: candidates.map((p) => ({
       place_id: p.id,

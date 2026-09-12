@@ -150,3 +150,59 @@ def test_empty_days_still_have_start_transit_and_end_timeline():
         "transit",
         "place",
     ]
+
+
+def _terminal_names(day: dict) -> tuple[str, str]:
+    stops = [item for item in day["timeline"] if item["type"] == "place"]
+    return stops[0]["name"], stops[-1]["name"]
+
+
+def test_a_middle_day_starts_and_ends_at_the_accommodation():
+    result = response_dict(
+        optimize_trip(
+            request(
+                [place(str(index), lat=37 + index / 100) for index in range(6)],
+                end_date="2026-09-21",
+            )
+        )
+    )
+    days = result["routes"][0]["days"]
+    assert _terminal_names(days[0]) == ("Seoul Station", "Myeongdong Hotel")
+    assert _terminal_names(days[1]) == ("Myeongdong Hotel", "Myeongdong Hotel")
+    assert _terminal_names(days[2]) == ("Myeongdong Hotel", "Seoul Station")
+
+
+def test_each_accommodation_anchors_its_own_night():
+    result = response_dict(
+        optimize_trip(
+            request(
+                [place(str(index), lat=37 + index / 100) for index in range(6)],
+                end_date="2026-09-21",
+                accommodations=[
+                    {"name": "First Hotel", "lat": 37.56, "lng": 126.98},
+                    {"name": "Second Hotel", "lat": 37.57, "lng": 126.99},
+                ],
+            )
+        )
+    )
+    days = result["routes"][0]["days"]
+    assert _terminal_names(days[0]) == ("Seoul Station", "First Hotel")
+    assert _terminal_names(days[1]) == ("First Hotel", "Second Hotel")
+    assert _terminal_names(days[2]) == ("Second Hotel", "Seoul Station")
+
+
+def test_driving_legs_cost_nothing_without_a_provider_toll():
+    result = response_dict(
+        optimize_trip(
+            request(
+                [place("a", lat=37.50), place("b", lat=37.60)],
+                transport_mode="car",
+            )
+        )
+    )
+    for route in result["routes"]:
+        assert route["total_cost"] == 0
+        for day in route["days"]:
+            for item in day["timeline"]:
+                if item["type"] == "transit":
+                    assert item["cost"] == 0

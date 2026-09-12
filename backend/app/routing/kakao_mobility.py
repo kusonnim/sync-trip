@@ -1,5 +1,5 @@
 import logging
-from math import ceil, floor
+from math import ceil
 from typing import Any
 
 import httpx
@@ -21,15 +21,7 @@ logger = logging.getLogger(__name__)
 KAKAO_DIRECTIONS_URL = "https://apis-navi.kakaomobility.com/v1/directions"
 
 
-def _round_positive(value: float) -> int:
-    return floor(value + 0.5)
-
-
-def normalize_kakao_route(
-    payload: Any,
-    destination_name: str,
-    car_cost_per_km_krw: int,
-) -> RoutedLeg:
+def normalize_kakao_route(payload: Any, destination_name: str) -> RoutedLeg:
     if not isinstance(payload, dict) or not isinstance(payload.get("routes"), list):
         raise MalformedProviderResponse("Kakao Mobility")
     routes = payload["routes"]
@@ -59,10 +51,10 @@ def normalize_kakao_route(
         raise MalformedProviderResponse("Kakao Mobility")
 
     distance_km = distance_meters / 1000
-    operating_cost = _round_positive(distance_km * car_cost_per_km_krw)
+    # Only the toll is a cost the trip actually pays; fuel belongs to the car's owner.
     return RoutedLeg(
         duration_minutes=max(1, ceil(duration_seconds / 60)),
-        cost=operating_cost + toll,
+        cost=toll,
         distance_km=distance_km,
         instruction=f"Drive to {destination_name}",
         provider="kakao_mobility",
@@ -122,8 +114,4 @@ class KakaoMobilityService:
             payload = response.json()
         except ValueError as exc:
             raise MalformedProviderResponse("Kakao Mobility") from exc
-        return normalize_kakao_route(
-            payload,
-            destination.name,
-            self._settings.car_cost_per_km_krw,
-        )
+        return normalize_kakao_route(payload, destination.name)

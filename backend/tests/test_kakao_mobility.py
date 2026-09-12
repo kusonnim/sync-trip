@@ -31,11 +31,12 @@ def payload(duration=3494, distance=19032, toll=2000):
     }
 
 
-def test_kakao_success_normalizes_duration_distance_operating_cost_and_toll():
-    leg = normalize_kakao_route(payload(), "Hotel", 140)
+def test_kakao_success_normalizes_duration_distance_and_reports_toll_only():
+    leg = normalize_kakao_route(payload(), "Hotel")
     assert leg.duration_minutes == 59
     assert leg.distance_km == pytest.approx(19.032)
-    assert leg.cost == 4664
+    # Driving cost is the toll; fuel is the group's own car, not a fare per leg.
+    assert leg.cost == 2000
     assert leg.instruction == "Drive to Hotel"
     assert leg.provider == "kakao_mobility"
 
@@ -89,4 +90,4 @@ async def test_kakao_timeout_is_normalized(settings):
 )
 def test_kakao_malformed_response_is_rejected(bad_payload):
     with pytest.raises(MalformedProviderResponse):
-        normalize_kakao_route(bad_payload, "Hotel", 140)
+        normalize_kakao_route(bad_payload, "Hotel")

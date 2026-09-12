@@ -5,7 +5,7 @@
 
 import { optimizeLocally, findConflicts } from '../src/lib/mockOptimize.js';
 import { TOP_N, scorePlaces, pickCandidates } from '../src/lib/preference.js';
-import { toMinutes } from '../src/lib/time.js';
+import { toMinutes, daysBetween } from '../src/lib/time.js';
 
 let failed = 0;
 
@@ -34,8 +34,10 @@ function place(id, name, category, lat, lng, extra = {}) {
   };
 }
 
+const HOTEL = { name: 'Myeongdong Hotel', lat: 37.5636, lng: 126.9827 };
+
 function settings(extra = {}) {
-  return {
+  const base = {
     transport_mode: 'transit',
     start_date: '2026-09-19',
     end_date: '2026-09-19',
@@ -45,6 +47,12 @@ function settings(extra = {}) {
     end_deadline: '21:30',
     ...extra,
   };
+  // Every night is spent at an accommodation unless a case names its own.
+  if (!base.accommodations) {
+    const nights = daysBetween(base.start_date, base.end_date) - 1;
+    base.accommodations = nights > 0 ? [HOTEL] : [];
+  }
+  return base;
 }
 
 const stopsOf = (route) =>
@@ -92,6 +100,34 @@ const stopsOf = (route) =>
     return within([toMinutes('11:30'), toMinutes('13:30')]) || within([toMinutes('17:30'), toMinutes('19:30')]);
   });
   check('Place restaurants only in meal windows', ok, meals.map((s) => s.time).join(', '));
+}
+
+// 3b. Arriving before a meal window means waiting for it, not failing the whole day.
+// A restaurant reached at opening time is the ordinary case on a one-restaurant day.
+{
+  const places = [place('a', 'Gwangjang Market', 'restaurant', 37.5701, 126.9996)];
+  const res = optimizeLocally({ settings: settings(), places });
+  const meal = res.status === 'success' ? stopsOf(res.routes[0])[0] : null;
+  check(
+    'Wait for the lunch window instead of rejecting the day',
+    meal !== null && toMinutes(meal.time.slice(0, 5)) >= toMinutes('11:30'),
+    meal ? `${meal.time} (대기 ${meal.wait_duration}분)` : res.code,
+  );
+}
+
+// 3c. Driving has no fare of its own. Only a routing provider knows the toll.
+{
+  const places = [
+    place('a', 'Gyeongbokgung Palace', 'attraction', 37.5796, 126.9770),
+    place('b', 'Seoul Forest', 'attraction', 37.5443, 127.0374),
+  ];
+  const res = optimizeLocally({ settings: settings({ transport_mode: 'car' }), places });
+  const legs = res.routes.flatMap((r) => r.days.flatMap((d) => d.timeline.filter((t) => t.type === 'transit')));
+  check(
+    'Driving legs carry no fuel cost',
+    res.status === 'success' && legs.length > 0 && legs.every((t) => t.cost === 0),
+    `${legs.length}개 구간, 총 ${res.routes[0]?.total_cost}원`,
+  );
 }
 
 // 4. Two conflicting scheduled visits return TIME_CONFLICT and identify both places.
@@ -150,8 +186,14 @@ const stopsOf = (route) =>
   const days = res.routes[0].days;
   const ok =
     days.length === 2 &&
-    days.every((d) => d.timeline.at(0).name === SEOUL.name && d.timeline.at(-1).name === SEOUL.name);
+    days[0].timeline.at(0).name === SEOUL.name &&
+    days[0].timeline.at(-1).name === HOTEL.name &&
+    days[1].timeline.at(0).name === HOTEL.name &&
+    days[1].timeline.at(-1).name === SEOUL.name;
   check('Split a two-day itinerary by date', ok, days.map((d) => d.date).join(', '));
+  check('A night is spent at the accommodation',
+    days[0].timeline.at(-1).name === HOTEL.name && days[1].timeline.at(0).name === HOTEL.name,
+    `${days[0].timeline.at(-1).name} → ${days[1].timeline.at(0).name}`);
   check('Dates begin on the requested start date', days[0].date === '2026-09-19' && days[1].date === '2026-09-20',
     days.map((d) => d.date).join(', '));
   check('Daily totals equal the route total',

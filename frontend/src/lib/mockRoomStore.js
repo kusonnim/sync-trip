@@ -24,6 +24,7 @@ function roomRecord(meta, code, hostId, token) {
     dailyStart: meta.dailyStart, dailyEnd: meta.dailyEnd,
     headcount: meta.headcount, transportMode: meta.transportMode,
     origin: meta.origin, destination: meta.destination,
+    accommodations: meta.accommodations ?? [],
     confirmedRouteId: null, optimizationState: 'idle', optimizationOwner: null, optimizationRunId: null,
   };
 }

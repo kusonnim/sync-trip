@@ -1,7 +1,10 @@
+from datetime import date
+
 from app.models.optimize import OptimizeRequest, Place, TripSettings
 
 
 SEOUL = {"name": "Seoul Station", "lat": 37.5547, "lng": 126.9707}
+HOTEL = {"name": "Myeongdong Hotel", "lat": 37.5636, "lng": 126.9827}
 
 
 def place(place_id: str, **overrides) -> Place:
@@ -33,6 +36,10 @@ def settings(**overrides) -> TripSettings:
         "end_deadline": "21:30",
     }
     data.update(overrides)
+    # Every night needs an accommodation, so supply one unless a test names its own.
+    if "accommodations" not in data:
+        nights = (date.fromisoformat(str(data["end_date"])) - date.fromisoformat(str(data["start_date"]))).days
+        data["accommodations"] = [HOTEL] if nights > 0 else []
     return TripSettings(**data)
 
 

@@ -38,7 +38,7 @@ export function daysBetween(startISO, endISO) {
 }
 
 // toISOString converts to UTC and can shift the date, so build the local value directly.
-function toISODate(d) {
+export function toISODate(d) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${month}-${day}`;

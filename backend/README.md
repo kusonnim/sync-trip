@@ -138,7 +138,7 @@ Borda scores select candidates before optimization. Because every permutation co
 
 Track 2 begins only after Track 1 finishes exhaustive local search. It retains the top three candidates per objective and day by default, deduplicates their orders, routes their legs sequentially, rebuilds timelines, revalidates every constraint, and reranks valid survivors using precise totals. Configure the bound with `TRACK2_CANDIDATES_PER_OBJECTIVE`.
 
-Driving uses Kakao Mobility's recommended summary route. Duration is converted from seconds to whole minutes and distance from meters to kilometers. `total_cost` means estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll; taxi fare is not included.
+Driving uses Kakao Mobility's recommended summary route. Duration is converted from seconds to whole minutes and distance from meters to kilometers. `total_cost` is Kakao's reported toll alone: fuel is the group's own car rather than a fare the trip pays, and taxi fare is not included. A Track 1 driving leg therefore costs zero, because no provider has told it about a toll.
 
 Transit uses ODsay's shortest `totalTime` route with `lang=1`. The Web Key remains the `apiKey` query parameter, and every request supplies the validated `ODSAY_REFERER` origin as its `Referer` header for URI authentication. Missing or invalid configuration returns `PROVIDER_NOT_CONFIGURED`; no Referer is inferred or hard-coded. `payment` is used as the fare, and lane names become concise English instructions. If payment is absent, the Track 1 fare estimate is used and the route receives `ESTIMATED_TRANSIT_FARE`.
 

@@ -38,9 +38,12 @@ function leg(a, b, mode) {
     mode === 'transit' ? 10 : 5,
     Math.round((km / SPEED[mode]) * 60) + WAIT[mode],
   );
+  // Transit charges a base fare for the first 10 km, then 100 won per whole 5 km step.
+  // Driving charges nothing: fuel is the group's own car, and only a routing
+  // provider knows the toll, which this local engine never calls.
   const cost = mode === 'transit'
-    ? 1400 + Math.max(0, Math.ceil(km - 10)) * 100
-    : Math.round(km * 140);
+    ? 1400 + Math.ceil(Math.max(0, km - 10) / 5) * 100
+    : 0;
   return { minutes, cost };
 }
 
@@ -54,11 +57,26 @@ function permutations(items) {
   return out;
 }
 
-// A meal must start within the lunch or dinner window.
-// Check the start time, not overlap, to prevent visits that only catch the end of a window.
-function inMealSlot(start) {
-  const within = ([from, to]) => start >= from && start <= to;
-  return within(LUNCH) || within(DINNER);
+/**
+ * When the visit can begin, or null if it cannot happen at all. Arriving early
+ * means waiting, not failing: waiting for the doors to open, for a reservation,
+ * or for a meal window. Mirrors resolve_visit_start in the backend.
+ */
+function resolveVisitStart(place, arrive) {
+  const open = toMinutes(place.open_time);
+  const close = toMinutes(place.close_time);
+  const window = place.hard_constraint;
+  const earliest = Math.max(arrive, open, window ? toMinutes(window.start) : 0);
+  // The whole minimum stay has to fit before closing, and a reservation caps the start.
+  const latest = Math.min(close - place.stay_time_min, window ? toMinutes(window.end) : close);
+
+  if (place.category !== 'restaurant') return earliest <= latest ? earliest : null;
+
+  for (const [mealStart, mealEnd] of [LUNCH, DINNER]) {
+    const candidate = Math.max(earliest, mealStart);
+    if (candidate <= mealEnd && candidate <= latest) return candidate;
+  }
+  return null;
 }
 
 function instructionFor(mode) {
@@ -68,8 +86,9 @@ function instructionFor(mode) {
 }
 
 // Simulate one permutation and return null when it violates a constraint.
-function simulate(order, ctx) {
-  const { origin, destination, mode, startAt, deadline } = ctx;
+function simulate(order, ctx, anchors) {
+  const { mode, startAt, deadline } = ctx;
+  const [origin, destination] = anchors;
   const timeline = [{ type: 'place', name: origin.name, time: toHHMM(startAt) }];
   let cursor = startAt;
   let prev = origin;
@@ -80,17 +99,9 @@ function simulate(order, ctx) {
   for (const place of order) {
     const move = leg(prev, place, mode);
     const arrive = cursor + move.minutes;
-    const open = toMinutes(place.open_time);
-    const close = toMinutes(place.close_time);
     const window = place.hard_constraint;
-
-    // Reject routes that miss the reservation window.
-    if (window && arrive > toMinutes(window.end)) return null;
-    const start = Math.max(arrive, open, window ? toMinutes(window.start) : 0);
-    if (window && start > toMinutes(window.end)) return null;
-    // Reject routes that cannot fit the minimum stay before closing.
-    if (start + place.stay_time_min > close) return null;
-    if (place.category === 'restaurant' && !inMealSlot(start)) return null;
+    const start = resolveVisitStart(place, arrive);
+    if (start === null) return null;
 
     const stay = place.stay_time_min;
     timeline.push({
@@ -204,6 +215,23 @@ function splitByDay(places, dayCount) {
 }
 
 /**
+ * Where each day begins and ends. The trip starts at the departure point and
+ * finishes at the arrival point; every night in between is spent at an
+ * accommodation, so one day ends where the next begins.
+ * One accommodation covers every night; more are used in order, one per night.
+ */
+function dayAnchors(settings, dayCount) {
+  const nights = dayCount - 1;
+  if (nights <= 0) return [[settings.start_location, settings.end_location]];
+  const stays = settings.accommodations ?? [];
+  const nightly = Array.from({ length: nights }, (_, night) => stays[Math.min(night, stays.length - 1)]);
+  const anchors = [[settings.start_location, nightly[0]]];
+  for (let night = 1; night < nights; night += 1) anchors.push([nightly[night - 1], nightly[night]]);
+  anchors.push([nightly[nights - 1], settings.end_location]);
+  return anchors;
+}
+
+/**
  * @param {object} body Request body from PROJECT.md section 4.3
  * @returns Response from PROJECT.md section 4.3
  */
@@ -224,15 +252,16 @@ export function optimizeLocally(body) {
   const dates = listDates(settings.start_date, daysBetween(settings.start_date, settings.end_date));
   const buckets = splitByDay([...places], dates.length);
   const ctx = {
-    origin: settings.start_location,
-    destination: settings.end_location,
     mode,
     startAt: toMinutes(settings.start_time),
     deadline: toMinutes(settings.end_deadline),
   };
+  const anchors = dayAnchors(settings, dates.length);
 
-  const perDay = buckets.map((bucket) =>
-    permutations(bucket.slice(0, 6)).map((order) => simulate(order, ctx)).filter(Boolean),
+  const perDay = buckets.map((bucket, dayIndex) =>
+    permutations(bucket.slice(0, 6))
+      .map((order) => simulate(order, ctx, anchors[dayIndex]))
+      .filter(Boolean),
   );
 
   if (perDay.some((c) => c.length === 0)) {

@@ -31,6 +31,16 @@ if (!globalThis.CustomEvent) {
   };
 }
 
+// The room state machine, mirrored from update_room_state in the migrations.
+// Backward moves exist because every screen past the landing page offers a step back.
+const ALLOWED_TRANSITIONS = {
+  setup: ['collecting'],
+  collecting: ['setup', 'analyzing'],
+  analyzing: ['collecting'],
+  voting: ['collecting', 'confirmed'],
+  confirmed: ['voting'],
+};
+
 const store = await import('../src/lib/roomStore.js');
 const { buildOptimizeBody } = await import('../src/lib/api.js');
 const meta = {
@@ -82,6 +92,7 @@ function createMockSupabase() {
           startDate: args.p_start_date, endDate: args.p_end_date,
           dailyStart: args.p_daily_start, dailyEnd: args.p_daily_end,
           headcount: args.p_headcount, transportMode: args.p_transport_mode,
+          accommodations: args.p_accommodations ?? [],
           origin: args.p_origin, destination: args.p_destination,
           optimizationState: 'idle', optimizationOwner: null, optimizationRunId: null,
           optimizationStartedAt: null, confirmedRouteId: null,
@@ -107,8 +118,13 @@ function createMockSupabase() {
       }
       if (name === 'update_room_state') {
         if (!target || target.hostToken !== args.p_host_token) return response(false);
+        // Mirror the SQL state machine, so a screen that steps back is exercised here
+        // rather than failing only against a real database.
+        if (!(ALLOWED_TRANSITIONS[target.status] ?? []).includes(args.p_status)) {
+          return response(null, { code: '22023', message: 'Invalid room state transition.' });
+        }
         target.status = args.p_status;
-        if (args.p_confirmed_route_type) target.confirmedRouteId = args.p_confirmed_route_type;
+        target.confirmedRouteId = args.p_status === 'confirmed' ? args.p_confirmed_route_type : null;
         if (args.p_reset_optimization) {
           target.optimizationState = 'idle'; target.optimizationOwner = null;
           target.optimizationRunId = null; target.optimizationStartedAt = null;
@@ -128,11 +144,14 @@ function createMockSupabase() {
         return response(true);
       }
       if (name === 'patch_room_place') {
-        const current = target?.places.find((item) => item.id === args.p_place_id);
+        // Editing times is open to anyone in the room, so membership is the only check.
+        if (!target?.members.some((item) => item.id === args.p_member_id)) return response(false);
+        const current = target.places.find((item) => item.id === args.p_place_id);
         if (!current) return response(false);
         Object.assign(current, args.p_patch); return response(true);
       }
       if (name === 'remove_room_place') {
+        if (!target?.members.some((item) => item.id === args.p_member_id)) return response(false);
         target.places = target.places.filter((item) => item.id !== args.p_place_id);
         Object.keys(target.preferences).forEach((id) => { target.preferences[id] = target.preferences[id].filter((item) => item !== args.p_place_id); });
         return response(true);
@@ -204,16 +223,39 @@ assert.equal((await supabaseStore.read(room.code)).members.filter((item) => item
 assert.equal((await supabaseStore.read(room.code)).members.find((item) => item.id === guestId).nickname, 'Renamed Guest');
 
 await supabaseStore.addPlace(room.code, place);
+// The guest is still the stored member here, which is the point: stay time and
+// removal are open to whoever is in the room, not to the host alone.
 await supabaseStore.updatePlace(room.code, place.id, { isFixed: true });
 await supabaseStore.updatePlace(room.code, place.id, { visitWindow: { start: '13:00', end: '13:30' } });
-assert.deepEqual((await supabaseStore.read(room.code)).places[0].visitWindow, { start: '13:00', end: '13:30' });
+await supabaseStore.updatePlace(room.code, place.id, { minStay: 45 });
+const guestEdited = (await supabaseStore.read(room.code)).places[0];
+assert.deepEqual(guestEdited.visitWindow, { start: '13:00', end: '13:30' });
+assert.equal(guestEdited.minStay, 45, 'a member who is not the host can set the stay time');
+
+await supabaseStore.addPlace(room.code, { ...place, id: 'p-scratch', name: 'Scratch' });
+await supabaseStore.removePlace(room.code, 'p-scratch');
+assert.ok(
+  !(await supabaseStore.read(room.code)).places.some((item) => item.id === 'p-scratch'),
+  'a member who is not the host can remove a place',
+);
 await supabaseStore.submitRanking(room.code, guestId, [place.id]);
 await supabaseStore.submitRanking(room.code, guestId, []);
 assert.deepEqual((await supabaseStore.read(room.code)).preferences[guestId], [], 'ranking replacement is atomic per member');
 
 sessionStorage.setItem(`synctrip:member-id:${room.code}`, hostId);
 await supabaseStore.patch(room.code, { status: 'collecting' });
+// Every screen offers a step back, so the state machine has to accept the reverse move.
+await supabaseStore.patch(room.code, { status: 'setup' });
+assert.equal((await supabaseStore.read(room.code)).status, 'setup', 'place picking steps back to the lobby');
+await supabaseStore.patch(room.code, { status: 'collecting' });
 await supabaseStore.patch(room.code, { status: 'analyzing', optimizationState: 'idle' });
+await supabaseStore.patch(room.code, { status: 'collecting', optimizationState: 'idle' });
+assert.equal((await supabaseStore.read(room.code)).status, 'collecting', 'analyzing steps back to place picking');
+await supabaseStore.patch(room.code, { status: 'analyzing', optimizationState: 'idle' });
+await assert.rejects(
+  () => supabaseStore.patch(room.code, { status: 'confirmed', confirmedRouteId: 'min_time' }),
+  'the state machine still refuses a move it does not define',
+);
 const lockResults = await Promise.all([
   supabaseStore.claimOptimization(room.code, hostId),
   supabaseStore.claimOptimization(room.code, hostId),
@@ -247,6 +289,11 @@ const finalNonce = await supabaseStore.claimOptimization(room.code, hostId);
 await supabaseStore.finishOptimization(room.code, { status: 'success', routes }, finalNonce);
 await supabaseStore.patch(room.code, { status: 'confirmed', confirmedRouteId: 'min_time' });
 assert.equal((await supabaseStore.read(room.code)).confirmedRouteId, 'min_time');
+await supabaseStore.patch(room.code, { status: 'voting', confirmedRouteId: null });
+const reopened = await supabaseStore.read(room.code);
+assert.equal(reopened.status, 'voting', 'a confirmed itinerary can be reopened for voting');
+assert.equal(reopened.confirmedRouteId, null, 'reopening a vote clears the previous winner');
+await supabaseStore.patch(room.code, { status: 'confirmed', confirmedRouteId: 'min_time' });
 unsubscribe();
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(supabaseMock.channels().size, 0, 'the Realtime channel is removed on cleanup');
@@ -254,13 +301,30 @@ assert.equal(supabaseMock.channels().size, 0, 'the Realtime channel is removed o
 const storedPlace = (await supabaseStore.read(room.code)).places[0];
 const body = buildOptimizeBody(await supabaseStore.read(room.code), [{ ...storedPlace, score: 7 }]);
 assert.equal(body.settings.transport_mode, 'transit');
+assert.deepEqual(body.settings.accommodations, [], 'a day trip carries no accommodation');
 assert.equal(body.places[0].preference_score, 7);
 assert.deepEqual(body.places[0].hard_constraint, { start: '13:00', end: '13:30' });
+
+// A trip with nights carries its accommodations straight through to the optimizer,
+// which is what lets a middle day start and end somewhere other than the origin.
+const hotel = { name: 'Myeongdong Hotel', lat: 37.5636, lng: 126.9827 };
+const overnight = buildOptimizeBody(
+  { ...(await supabaseStore.read(room.code)), endDate: '2026-09-21', accommodations: [hotel] },
+  [{ ...storedPlace, score: 7 }],
+);
+assert.deepEqual(overnight.settings.accommodations, [hotel], 'accommodations reach the optimizer');
+assert.equal(overnight.settings.end_date, '2026-09-21');
+
+// A solo trip is a trip. The room store must not impose a floor of two.
+const soloRoom = await supabaseStore.create({ ...meta, headcount: 1, hostNickname: 'Solo' });
+assert.equal((await supabaseStore.read(soloRoom.code)).headcount, 1, 'one person can open a room');
 
 // Static migration checks keep critical SQL invariants visible without a production project.
 const migrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912000000_sync_trip_initial_schema.sql', import.meta.url));
 const visitMigrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912010000_add_scheduled_visit_windows.sql', import.meta.url));
-const sql = `${readFileSync(migrationPath, 'utf8')}\n${readFileSync(visitMigrationPath, 'utf8')}`;
+const stepBackMigrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912020000_allow_step_back_transitions.sql', import.meta.url));
+const staysMigrationPath = fileURLToPath(new URL('../../supabase/migrations/20260912030000_accommodations_solo_trips_and_member_place_edits.sql', import.meta.url));
+const sql = [migrationPath, visitMigrationPath, stepBackMigrationPath, staysMigrationPath].map((path) => readFileSync(path, 'utf8')).join('\n');
 for (const table of ['rooms', 'room_members', 'room_places', 'room_preferences', 'room_routes', 'room_errors', 'room_final_votes']) {
   assert.match(sql, new RegExp(`create table public\\.${table}`));
   assert.match(sql, new RegExp(`alter table public\\.${table} enable row level security`));
@@ -280,6 +344,47 @@ assert.equal(
   (sql.match(/security definer/g) ?? []).length,
   (sql.match(/security definer\s+set search_path = ''/g) ?? []).length,
   'every security-definer RPC fixes its search path',
+);
+assert.match(
+  sql,
+  /v_room\.status = 'collecting' and p_status in \('setup', 'analyzing'\)/,
+  'the SQL state machine allows stepping back from place picking',
+);
+assert.match(
+  sql,
+  /v_room\.status = 'analyzing' and p_status = 'collecting'/,
+  'the SQL state machine allows stepping back from analyzing',
+);
+assert.match(
+  sql,
+  /v_room\.status = 'confirmed' and p_status = 'voting'/,
+  'the SQL state machine allows reopening a confirmed vote',
+);
+assert.match(
+  sql,
+  /confirmed_route_type = case when p_status = 'confirmed' then p_confirmed_route_type else null end/,
+  'leaving the confirmed state clears the previous winner',
+);
+assert.match(sql, /headcount between 1 and 12/, 'a trip of one is allowed');
+assert.match(
+  sql,
+  /'accommodations', r\.accommodations/,
+  'snapshots expose where the group sleeps',
+);
+assert.match(
+  sql,
+  /There are more accommodations than nights/,
+  'a room cannot hold more accommodations than nights',
+);
+assert.match(
+  sql,
+  /create function public\.patch_room_place\(\s*\n\s*p_room_code text, p_member_id text/,
+  'editing a place is authorized by room membership',
+);
+assert.match(
+  sql,
+  /create function public\.remove_room_place\(p_room_code text, p_member_id text/,
+  'removing a place is authorized by room membership',
 );
 assert.match(sql, /supabase_realtime/);
 assert.match(sql, /revoke all on public\.rooms/);

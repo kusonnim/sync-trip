@@ -18,7 +18,9 @@ Browser (React + Vite)
 
 Rooms progress through `setup → collecting → analyzing → voting → confirmed`. Relational tables persist members, places, rankings, routes, errors, and one vote per member. The host acquires an atomic PostgreSQL optimization lock, calls FastAPI with one coherent room snapshot, and completes the run through a nonce-protected RPC.
 
-The Korean mobile UI separates unlimited place suggestions from each member's top-three ranking. Hosts can edit business hours, required stops, stay duration, and scheduled visit windows before the group compares and votes on the generated routes.
+The Korean mobile UI separates unlimited place suggestions from each member's top-three ranking. Anyone in the room can edit business hours, required stops, stay duration, and scheduled visit windows, or remove a place, before the group compares and votes on the generated routes. Only the host starts the optimization and moves the room between steps.
+
+A trip may be taken alone or by up to twelve people. Setup takes the departure point, the arrival point, and where the group sleeps, each chosen by search so the coordinates are real. One accommodation covers every night, and more can be added, one per night. The first day leaves the departure point, the last day ends at the arrival point, and every day in between starts and ends at that night's accommodation.
 
 ## Supabase Setup
 
@@ -100,4 +102,4 @@ Anonymous room creation and member RPCs can also be automated by anyone holding 
 
 ## Remaining MVP Limitations
 
-There are no user accounts, maps, route polylines, image export, or full offline-first workflow. Realtime reconnects normally, but writes made while the database is unavailable surface as errors rather than forming an offline queue. Route caching is process-local, day assignment is geographic, reservations cannot be pinned to a date, and `stay_time_max` does not allocate optional slack. Live Supabase, provider, and deployment behavior requires credentials and separate verification.
+There are no user accounts, maps, route polylines, image export, or full offline-first workflow. Realtime reconnects normally, but writes made while the database is unavailable surface as errors rather than forming an offline queue. Route caching is process-local, day assignment is geographic, reservations cannot be pinned to a date, and `stay_time_max` does not allocate optional slack. Driving cost counts only tolls, so without a routing provider a driving itinerary has no cost to compare and the two route options differ by time alone. Live Supabase, provider, and deployment behavior requires credentials and separate verification.

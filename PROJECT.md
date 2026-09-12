@@ -13,7 +13,7 @@
 1. **Place Cart & Ranked Voting:** Team members add as many places as they like to a shared cart, then each picks a personal **top 3** from it. Borda scores (3/2/1) are summed to choose the candidates (4 slots per travel day, plus any place the host marked as required). A place that was only added, never ranked, scores 0.
 2. **Hybrid Constraint Settings:**
 * Automatic fetching of basic business hours (or utilizing fallback mock DB for testing).
-* The host can manually override/set **Hard Constraints** (e.g., "Dinner reservation at 6:00 PM").
+* Anyone in the room can set **Hard Constraints** (e.g., "Dinner reservation at 6:00 PM"), adjust stay time and business hours, or remove a place. The accountless design cannot prove who owns a member ID, so this is a shared trust boundary, not per-user authorization.
 
 
 3. **Time-Window Route Optimization Engine:**
@@ -150,6 +150,11 @@ The 3 core endpoints for communication between the frontend and the Python FastA
 departure time and the daily "everyone goes home" deadline, applied to every day.
 `end_location` may differ from `start_location`.
 
+`accommodations` is where the group sleeps, one entry per night, used in order. A single entry
+covers every night. A trip with no night rejects the field; a trip with nights requires at least
+one and never more than the night count. The first day begins at `start_location`, the last day
+ends at `end_location`, and every day in between begins and ends at that night's accommodation.
+
 Business hours travel on the place object itself (`open_time` / `close_time`), so `hard_constraint`
 means only a user-entered reservation window and is `null` for most places.
 `preference_score` is the summed Borda score used to select candidates before optimization. It is
@@ -165,7 +170,8 @@ places, so its aggregate is constant.
     "start_location": {"name": "Seoul Station", "lat": 37.554, "lng": 126.970},
     "end_location": {"name": "Seoul Station", "lat": 37.554, "lng": 126.970},
     "start_time": "10:00",
-    "end_deadline": "21:00"
+    "end_deadline": "21:00",
+    "accommodations": [{"name": "Myeongdong Hotel", "lat": 37.563, "lng": 126.982}]
   },
   "places": [
     {
@@ -262,7 +268,7 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 ## 5. Algorithm Logic Summary (Phase 3)
 
-0. **Day Splitting (runs first):** Cluster every candidate by coordinate into as many groups as there are travel days, targeting the normal four places per day. Exhaustive search supports at most six places per day (`6! = 720`). Reject larger inputs explicitly; never truncate or discard candidates. Every day starts at `start_location` and ends at `end_location`.
+0. **Day Splitting (runs first):** Cluster every candidate by coordinate into as many groups as there are travel days, targeting the normal four places per day. Exhaustive search supports at most six places per day (`6! = 720`). Reject larger inputs explicitly; never truncate or discard candidates. Each day runs between its own anchors: the first starts at `start_location`, the last ends at `end_location`, and each night in between is spent at an accommodation, so one day ends where the next begins.
 
 1. **Two-Track Routing Strategy:**
 * **Track 1 (Fast Permutation Calculation):** Use static average travel times to evaluate every permutation, up to 720 combinations for six places, and isolate the optimal orders.
@@ -289,4 +295,4 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 5. **Track 2 Failure Policy:** A provider no-route result invalidates that precise candidate and advances to the next bounded candidate. If none survive, return `PRECISE_ROUTE_INFEASIBLE`. Timeouts, rate limits, malformed responses, and temporary upstream failures return the Track 1 routes with an explicit `ROUTING_FALLBACK` warning. Missing configuration and authentication errors remain visible service failures.
 
-6. **Precise Cost Semantics:** ODsay's reported `payment` is the transit fare; when absent, use the Track 1 fare estimate and emit `ESTIMATED_TRANSIT_FARE`. Driving cost is estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll, without taxi fare.
+6. **Precise Cost Semantics:** ODsay's reported `payment` is the transit fare; when absent, use the Track 1 fare estimate and emit `ESTIMATED_TRANSIT_FARE`. Driving cost is Kakao's reported toll and nothing else. Fuel and wear belong to the group's own car, not to a fare the trip pays per leg, so Track 1 driving legs cost zero and the UI labels the driving total as a toll.

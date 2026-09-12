@@ -113,13 +113,13 @@ button, input, select, textarea { font-family: inherit; }
 .card-head .count { font-size: 12px; color: var(--ink-faint); }
 
 /* Forms */
-label.field {
+.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
 }
-label.field > span {
+.field > span {
   font-size: 13px;
   font-weight: 600;
   color: var(--ink-soft);
@@ -453,3 +453,136 @@ button:not(:disabled):active { filter: brightness(.96); }
 .center { text-align: center; }
 .stack-8 { display: flex; flex-direction: column; gap: 8px; }
 .empty-state { color: var(--ink-faint); font-size: 12px; margin: 0; }
+
+/* Wheel pickers. A value is set by scrolling a column under a fixed band,
+   in place on the page, rather than by opening a separate sheet. */
+.wheel-row { display: flex; gap: 10px; }
+.wheel-row.single { max-width: 140px; }
+.wheel {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+/* The band marks the row that counts. It must not swallow the scroll gesture. */
+.wheel-band {
+  position: absolute;
+  left: 6px; right: 6px;
+  top: calc(var(--wheel-item) * 2);
+  height: var(--wheel-item);
+  border-radius: 8px;
+  background: var(--brand-soft);
+  pointer-events: none;
+}
+.wheel-list {
+  position: relative;
+  height: calc(var(--wheel-item) * 5);
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  /* Snap against the band, not the top edge. Without this the padding rows are not
+     snap targets, so the browser slides the list down to the first real row and the
+     wheel reports a value two rows off the one under the band. */
+  scroll-padding-top: calc(var(--wheel-item) * 2);
+  scrollbar-width: none;
+  /* The wheel is the one place a vertical drag must not scroll the page. */
+  overscroll-behavior: contain;
+}
+.wheel-list::-webkit-scrollbar { display: none; }
+.wheel-list:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+/* Two blank rows at each end let the first and last value reach the band. */
+.wheel-pad { height: calc(var(--wheel-item) * 2); }
+.wheel-item {
+  height: var(--wheel-item);
+  scroll-snap-align: start;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  user-select: none;
+}
+.wheel-item.selected { color: var(--ink); font-weight: 700; }
+
+/* One calendar for both ends of the trip. */
+.calendar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.calendar-month { font-size: 15px; font-weight: 700; }
+.calendar-nav {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px 12px;
+}
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  padding-bottom: 4px;
+}
+.calendar-day {
+  aspect-ratio: 1;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  padding: 0;
+}
+.calendar-day:disabled { color: var(--ink-faint); opacity: 0.45; }
+/* The days between the two ends read as one block, so the run is square-edged
+   in the middle and rounded only where the trip actually starts and stops. */
+.calendar-day.inside { background: var(--brand-soft); border-radius: 0; }
+.calendar-day.picked { background: var(--brand); color: #fff; font-weight: 700; }
+.calendar-day.range-start { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.calendar-day.range-end { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+
+/* Searching for a real place instead of trusting a typed name. */
+.place-field { position: relative; }
+.place-field-row { display: flex; gap: 8px; align-items: center; }
+.place-field-row > input { flex: 1; }
+.picked-place {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+}
+.search-results { margin-top: 6px; }
+.item.result {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.add-stay { border-style: dashed; color: var(--brand); }
+
+/* The row that follows the finger during a drag. It is a copy, so it carries no
+   controls and never receives a press of its own. */
+.dragging-overlay {
+  box-shadow: 0 10px 24px rgba(31, 38, 55, 0.18);
+  cursor: grabbing;
+}

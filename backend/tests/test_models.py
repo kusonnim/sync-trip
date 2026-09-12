@@ -13,6 +13,7 @@ def valid_settings() -> dict:
         "end_location": {"name": "Seoul Station", "lat": 37.554, "lng": 126.970},
         "start_time": "10:00",
         "end_deadline": "21:00",
+        "accommodations": [{"name": "Myeongdong Hotel", "lat": 37.563, "lng": 126.982}],
     }
 
 
@@ -102,3 +103,64 @@ def test_closing_before_opening_is_rejected():
     data["close_time"] = "17:00"
     with pytest.raises(ValidationError, match="close_time"):
         Place(**data)
+
+
+def test_single_day_trip_rejects_an_accommodation():
+    data = valid_settings()
+    data["end_date"] = "2026-09-19"
+    with pytest.raises(ValidationError, match="no night"):
+        TripSettings(**data)
+
+
+def test_multi_day_trip_requires_an_accommodation():
+    data = valid_settings()
+    data["accommodations"] = []
+    with pytest.raises(ValidationError, match="at least one accommodation"):
+        TripSettings(**data)
+
+
+def test_accommodations_cannot_outnumber_the_nights():
+    data = valid_settings()
+    data["accommodations"] = [
+        {"name": "First", "lat": 37.56, "lng": 126.98},
+        {"name": "Second", "lat": 37.57, "lng": 126.99},
+    ]
+    with pytest.raises(ValidationError, match="night"):
+        TripSettings(**data)
+
+
+def test_a_single_accommodation_covers_every_night():
+    data = valid_settings()
+    data["end_date"] = "2026-09-22"
+    anchors = TripSettings(**data).day_anchors()
+    assert [start.name for start, _ in anchors] == [
+        "Seoul Station", "Myeongdong Hotel", "Myeongdong Hotel", "Myeongdong Hotel",
+    ]
+    assert [end.name for _, end in anchors] == [
+        "Myeongdong Hotel", "Myeongdong Hotel", "Myeongdong Hotel", "Seoul Station",
+    ]
+
+
+def test_each_accommodation_takes_its_own_night_in_order():
+    data = valid_settings()
+    data["end_date"] = "2026-09-21"
+    data["accommodations"] = [
+        {"name": "First", "lat": 37.56, "lng": 126.98},
+        {"name": "Second", "lat": 37.57, "lng": 126.99},
+    ]
+    anchors = TripSettings(**data).day_anchors()
+    assert [(start.name, end.name) for start, end in anchors] == [
+        ("Seoul Station", "First"),
+        ("First", "Second"),
+        ("Second", "Seoul Station"),
+    ]
+
+
+def test_a_single_day_trip_runs_from_start_to_end_location():
+    data = valid_settings()
+    data["end_date"] = "2026-09-19"
+    data["accommodations"] = []
+    anchors = TripSettings(**data).day_anchors()
+    assert [(start.name, end.name) for start, end in anchors] == [
+        ("Seoul Station", "Seoul Station"),
+    ]

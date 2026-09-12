@@ -11,10 +11,12 @@ CAR_WAIT_MINUTES = 0
 TRANSIT_WAIT_MINUTES = 8
 MIN_CAR_MINUTES = 5
 MIN_TRANSIT_MINUTES = 10
+# One fare: a base that covers the first stretch, then a surcharge per whole step
+# beyond it. The base distance is the threshold; the step is how far each 100 won buys.
 TRANSIT_BASE_FARE_KRW = 1400
-TRANSIT_DISTANCE_STEP_KM = 10.0
+TRANSIT_BASE_DISTANCE_KM = 10.0
+TRANSIT_STEP_DISTANCE_KM = 5.0
 TRANSIT_STEP_FARE_KRW = 100
-CAR_COST_PER_KM_KRW = 140
 
 
 class Coordinate(Protocol):
@@ -55,14 +57,15 @@ def estimate_leg(
     if mode == "car":
         travel_minutes = _round_positive(road_km / CAR_SPEED_KMH * 60)
         minutes = max(MIN_CAR_MINUTES, travel_minutes + CAR_WAIT_MINUTES)
-        cost = _round_positive(road_km * CAR_COST_PER_KM_KRW)
+        # Driving cost is the toll alone, which only a routing provider knows.
+        # Fuel and wear are the group's own car, not a fare the trip pays per leg.
+        cost = 0
     elif mode == "transit":
         travel_minutes = _round_positive(road_km / TRANSIT_SPEED_KMH * 60)
         minutes = max(MIN_TRANSIT_MINUTES, travel_minutes + TRANSIT_WAIT_MINUTES)
-        cost = TRANSIT_BASE_FARE_KRW + max(
-            0,
-            ceil(road_km - TRANSIT_DISTANCE_STEP_KM),
-        ) * TRANSIT_STEP_FARE_KRW
+        billable_km = max(0.0, road_km - TRANSIT_BASE_DISTANCE_KM)
+        steps = ceil(billable_km / TRANSIT_STEP_DISTANCE_KM)
+        cost = TRANSIT_BASE_FARE_KRW + steps * TRANSIT_STEP_FARE_KRW
     else:
         raise ValueError(f"Unsupported transport mode: {mode}")
     return TravelEstimate(distance_km=road_km, minutes=minutes, cost=cost)
