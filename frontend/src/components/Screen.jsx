@@ -1,5 +1,6 @@
-// Every screen renders inside one framed card, with the primary action pinned to its foot.
-export default function Screen({ title, subtitle, children, footer, centered }) {
+// Every screen renders inside one framed card, with its actions pinned to the foot.
+// `back` puts a step-back control beside the primary button so a choice can be revised.
+export default function Screen({ title, subtitle, children, footer, centered, back }) {
   return (
     <div className="page">
       <div className="app">
@@ -14,7 +15,23 @@ export default function Screen({ title, subtitle, children, footer, centered }) 
             <div className="screen-body">{children}</div>
           </>
         )}
-        {footer && <div className="bottom-bar">{footer}</div>}
+        {(footer || back) && (
+          <div className="bottom-bar">
+            <div className="bottom-actions">
+              {back && (
+                <button
+                  className="btn-back"
+                  onClick={back.onClick}
+                  disabled={back.disabled}
+                  aria-label={`${back.label}(으)로 돌아가기`}
+                >
+                  ← {back.label}
+                </button>
+              )}
+              {footer && <div className="bottom-primary">{footer}</div>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

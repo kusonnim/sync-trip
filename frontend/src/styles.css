@@ -67,6 +67,21 @@ button, input, select, textarea { font-family: inherit; }
   gap: 4px;
 }
 .topbar h1 { font-size: 18px; margin: 0; font-weight: 700; }
+/* Foot actions: the step-back control keeps its own width beside the primary button. */
+.bottom-actions { display: flex; gap: 8px; align-items: stretch; }
+.bottom-primary { flex: 1; min-width: 0; }
+.btn-back {
+  flex: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 16px 16px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.btn-back:not(:disabled):hover { color: var(--brand); border-color: var(--brand); }
 .topbar .sub { font-size: 13px; color: var(--ink-soft); margin: 0; }
 
 .screen-body {
@@ -268,6 +283,50 @@ button:not(:disabled):active { filter: brightness(.96); }
   justify-content: center;
 }
 .rank-dot.empty { background: var(--strip); color: var(--ink-faint); }
+/* The whole row is the drag handle. touch-action stays at manipulation so a plain
+   swipe still scrolls the page; only a short press starts a drag. */
+.item.draggable {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  cursor: grab;
+  touch-action: manipulation;
+  user-select: none;
+}
+/* The row's own line of content, so an expanded panel can sit beneath it. */
+.item-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+}
+/* Time settings open inside the row rather than at the foot of the screen. */
+.item-expand {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  cursor: auto;
+  user-select: auto;
+}
+.place-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.item.draggable:active { cursor: grabbing; }
+.item.draggable:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+/* The buttons inside keep their own cursor and text selection. */
+.item.draggable .item-actions { cursor: auto; user-select: auto; }
+.list.drop-target {
+  outline: 2px dashed var(--brand);
+  outline-offset: 6px;
+  border-radius: 12px;
+}
+.rank-label { margin-left: 0; }
 
 /* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }

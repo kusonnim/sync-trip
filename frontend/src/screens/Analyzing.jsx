@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen';
 import { optimize, buildOptimizeBody } from '../lib/api';
-import { claimOptimization, finishOptimization, readRoom } from '../lib/roomStore';
+import { claimOptimization, finishOptimization, patchRoom, readRoom } from '../lib/roomStore';
 import { scorePlaces, pickCandidates } from '../lib/preference';
 import { daysBetween } from '../lib/time';
 
 const STEPS = ['선호 점수 계산', '방문 후보 정리', '이동시간·비용 분석', '최적 경로 2안 생성'];
 
 export default function Analyzing({ room, me, isHost }) {
+  const navigate = useNavigate();
   const [done, setDone] = useState(0);
   const [error, setError] = useState('');
+  const [leaving, setLeaving] = useState(false);
   const started = useRef(false);
   const snapshot = useRef(room);
 
@@ -62,8 +65,24 @@ export default function Analyzing({ room, me, isHost }) {
 
   const dayCount = daysBetween(room.startDate, room.endDate);
 
+  // Stepping back abandons this run. The result is written under a run id, so a
+  // calculation still in flight cannot overwrite the room after we leave.
+  async function backToPicking() {
+    setLeaving(true); setError('');
+    try { await patchRoom(room.code, { status: 'collecting', optimizationState: 'idle', optimizationOwner: null }); }
+    catch { setError('희망지 화면으로 돌아가지 못했습니다. 다시 시도해 주세요.'); setLeaving(false); }
+  }
+
   return (
-    <Screen title="의견을 취합하고 있어요" subtitle="잠시만 기다려 주세요">
+    <Screen
+      title="의견을 취합하고 있어요"
+      subtitle="잠시만 기다려 주세요"
+      back={
+        isHost
+          ? { label: '희망지', onClick: backToPicking, disabled: leaving }
+          : { label: '처음', onClick: () => navigate('/') }
+      }
+    >
       <div className="card" style={{ gap: 14 }}>
         {STEPS.map((label, i) => (
           <div className={i < done ? 'progress-step done' : 'progress-step'} key={label}>

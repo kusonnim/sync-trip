@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen';
 import RouteCard from '../components/RouteCard';
 import ConflictNotice from '../components/ConflictNotice';
@@ -6,6 +7,7 @@ import { castVote, patchRoom } from '../lib/roomStore';
 import { durationText, won } from '../lib/time';
 
 export default function Result({ room, me, isHost }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(room.routes[0]?.type ?? null);
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -41,6 +43,13 @@ export default function Result({ room, me, isHost }) {
     catch { setSyncError('최종 일정을 확정하지 못했습니다. 다시 시도해 주세요.'); setSaving(false); }
   }
 
+  async function unconfirm() {
+    setSaving(true); setSyncError('');
+    try { await patchRoom(room.code, { status: 'voting', confirmedRouteId: null }); }
+    catch { setSyncError('확정을 되돌리지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setSaving(false); }
+  }
+
   async function returnToEditing() {
     setSaving(true); setSyncError('');
     try { await patchRoom(room.code, { status: 'collecting', optimizationState: 'idle' }); }
@@ -53,6 +62,7 @@ export default function Result({ room, me, isHost }) {
       <Screen
         title="일정을 만들지 못했어요"
         subtitle="시간을 조정하면 다시 계산합니다"
+        back={{ label: '처음', onClick: () => navigate('/') }}
         footer={
           <button
             className="btn-primary"
@@ -73,6 +83,13 @@ export default function Result({ room, me, isHost }) {
     <Screen
       title={confirmed ? '이 일정으로 확정했어요' : '어느 일정으로 갈까요'}
       subtitle={`${castCount} / ${room.members.length}명 투표`}
+      back={
+        isHost
+          ? confirmed
+            ? { label: '투표', onClick: unconfirm, disabled: saving }
+            : { label: '희망지', onClick: returnToEditing, disabled: saving }
+          : { label: '처음', onClick: () => navigate('/') }
+      }
       footer={
         confirmed ? (
           <button className="btn-good" onClick={share}>

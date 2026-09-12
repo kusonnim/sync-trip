@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Screen from '../components/Screen';
 import { patchRoom } from '../lib/roomStore';
 import { TOP_N, SLOTS_PER_DAY } from '../lib/preference';
 import { daysBetween } from '../lib/time';
 
 export default function RoomLobby({ room, isHost }) {
+  const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
@@ -36,6 +38,7 @@ export default function RoomLobby({ room, isHost }) {
     <Screen
       title="팀원을 기다리는 중"
       subtitle={room.title}
+      back={{ label: '처음', onClick: () => navigate('/') }}
       footer={
         isHost ? (
           <button
