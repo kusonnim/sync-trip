@@ -11,6 +11,7 @@ from app.api.optimize import router as optimize_router
 from app.api.search import router as search_router
 from app.config import Settings, get_settings
 from app.models.common import ErrorResponse
+from app.routing.router import build_routing_service
 from app.services.errors import ProviderError
 
 
@@ -23,7 +24,8 @@ class HealthResponse(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     config = settings or get_settings()
-    application = FastAPI(title=config.app_name, version="0.1.0")
+    application = FastAPI(title=config.app_name, version="0.3.0")
+    application.state.routing_service = build_routing_service(config)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=config.allowed_origins,

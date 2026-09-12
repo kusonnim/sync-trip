@@ -6,17 +6,17 @@ Each traveler ranks the places they want to visit. SyncTrip combines those prefe
 
 ## Current Status
 
-The frontend supports the complete ten-step flow. The Phase 2 FastAPI backend now provides place search, business-hours lookup, and deterministic Track 1 route optimization.
+The frontend supports the complete ten-step flow. The Phase 3 FastAPI backend provides place search, business-hours lookup, local Track 1 optimization, and bounded live-route refinement.
 
 | Area | Status |
 |---|---|
 | Ten-step frontend flow | Complete |
-| Optimization engine | Phase 2 backend Track 1 implementation; frontend mock retained for offline development |
+| Optimization engine | Track 1 exhaustive local search plus Track 2 live refinement |
 | Real-time room-state synchronization | Uses localStorage and synchronizes tabs in the same browser |
 | Firestore | Not connected |
-| FastAPI backend | Phase 2 complete: health, place APIs, and `POST /api/optimize` |
+| FastAPI backend | Phase 3 complete: health, place APIs, optimization, and routing adapters |
 | Live Kakao and Google place APIs | Available when backend keys are configured; automated tests use mocks |
-| ODsay and Kakao Mobility | Not connected; Track 1 uses backend distance-based estimates |
+| ODsay and Kakao Mobility | Implemented backend-only; credentials and provider access are required for live calls |
 | Map and result-image export | Not implemented |
 
 ## Run Locally
@@ -64,7 +64,7 @@ frontend/           React application (implemented)
   src/components/   Timeline, route card, and conflict notice
   src/lib/          Optimizer, room store, and API client
   scripts/          Constraint-check scripts
-backend/            FastAPI server with place APIs and Track 1 optimizer (Phase 2)
+backend/            FastAPI server with Track 1 optimization and Track 2 routing
 docs/               PRD and original reference material
 ```
 

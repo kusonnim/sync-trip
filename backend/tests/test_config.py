@@ -9,6 +9,9 @@ def test_backend_can_start_without_provider_keys():
     settings = Settings(_env_file=None, cors_origins="http://localhost:5173")
     assert settings.kakao_rest_api_key is None
     assert settings.google_places_api_key is None
+    assert settings.odsay_api_key is None
+    assert settings.track2_candidates_per_objective == 3
+    assert settings.routing_cache_ttl_seconds == 1800
     assert create_app(settings).title == "SyncTrip API"
 
 

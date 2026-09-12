@@ -7,6 +7,7 @@ from .optimize import (
     OptimizeRequest,
     OptimizeSuccessResponse,
     Place,
+    RouteWarning,
     TripSettings,
 )
 from .place import PlaceHours, SearchPlace
@@ -19,6 +20,7 @@ __all__ = [
     "OptimizeSuccessResponse",
     "Place",
     "PlaceHours",
+    "RouteWarning",
     "SearchPlace",
     "TripSettings",
 ]

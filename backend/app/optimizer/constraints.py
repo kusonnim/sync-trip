@@ -15,13 +15,14 @@ class SimulatedDay:
     timeline: list[dict]
     total_time: int
     total_cost: int
+    has_estimated_cost: bool = False
 
 
 def format_minutes(value: int) -> str:
     return f"{value // 60:02d}:{value % 60:02d}"
 
 
-def _visit_start(place: Place, arrival: int) -> int | None:
+def resolve_visit_start(place: Place, arrival: int) -> int | None:
     opening = time_to_minutes(place.open_time)
     closing = time_to_minutes(place.close_time)
     reservation_start = (
@@ -61,7 +62,7 @@ def simulate_day(order: tuple[Place, ...], settings: TripSettings) -> SimulatedD
     for place in order:
         travel = estimate_leg(previous, place, mode)
         arrival = cursor + travel.minutes
-        start = _visit_start(place, arrival)
+        start = resolve_visit_start(place, arrival)
         if start is None:
             return None
         departure = start + place.stay_time_min

@@ -13,10 +13,16 @@ class Settings(BaseSettings):
     app_name: str = "SyncTrip API"
     kakao_rest_api_key: SecretStr | None = None
     google_places_api_key: SecretStr | None = None
+    odsay_api_key: SecretStr | None = None
     cors_origins: str = "http://localhost:5173"
     provider_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
     google_cache_ttl_seconds: int = Field(default=3600, ge=1)
     google_cache_max_entries: int = Field(default=256, ge=1)
+    routing_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
+    routing_cache_ttl_seconds: int = Field(default=1800, ge=1)
+    routing_cache_max_entries: int = Field(default=512, ge=1)
+    track2_candidates_per_objective: int = Field(default=3, ge=1, le=10)
+    car_cost_per_km_krw: int = Field(default=140, ge=0)
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

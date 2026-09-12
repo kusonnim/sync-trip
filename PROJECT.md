@@ -31,10 +31,11 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the frontend runs the whole flow on its own, and the Phase 2 backend provides the
+**Build status:** the frontend runs the whole flow on its own, and the Phase 3 backend provides the
 FastAPI application, health check, Kakao Local search proxy, Google Places business-hours lookup,
-and Track 1 optimization. Setting `VITE_API_BASE` routes all three frontend API calls to the backend;
-`src/lib/mockOptimize.js` remains an offline development fallback.
+Track 1 optimization, and Track 2 live refinement through Kakao Mobility or ODsay. Setting
+`VITE_API_BASE` routes all three frontend API calls to the backend; `src/lib/mockOptimize.js`
+remains an offline development fallback.
 
 ```text
 📦 SyncTrip
@@ -54,12 +55,13 @@ and Track 1 optimization. Setting `VITE_API_BASE` routes all three frontend API 
  ┃ ┃ ┗ 📜 check-optimizer.mjs # Constraint checks, run with `npm run check`
  ┃ ┗ 📜 package.json
  ┃
- ┗ 📂 backend/ (Python FastAPI) — Phase 2 place APIs and Track 1 optimizer
+ ┗ 📂 backend/ (Python FastAPI) — Phase 3 place APIs and two-track optimizer
    ┣ 📂 app/
    ┃ ┣ 📜 main.py          # FastAPI application and CORS setup
    ┃ ┣ 📂 api/             # Search, business-hours, and optimization routes
    ┃ ┣ 📂 models/          # Explicit API request and response models
    ┃ ┣ 📂 optimizer/       # Day splitting, estimation, constraints, scoring, conflicts
+   ┃ ┣ 📂 routing/         # Cached Kakao Mobility and ODsay routing adapters
    ┃ ┗ 📂 services/        # Kakao Local and Google Places adapters
    ┣ 📜 requirements.txt   # FastAPI, Uvicorn, Requests, etc.
    ┗ 📜 .env               # API Key storage (never committed)
@@ -179,6 +181,7 @@ places, so its aggregate is constant.
 
 Two routes over the same candidates, ordered `min_time` first. Each route holds one entry per
 travel day, and each day holds the alternating place / transit timeline.
+Phase 3 may also include backward-compatible `routing_source` and `warning` fields on each route.
 
 ```json
 {
@@ -189,6 +192,7 @@ travel day, and each day holds the alternating place / transit timeline.
       "label": "Fastest Route",
       "total_time": 240,
       "total_cost": 8600,
+      "routing_source": "provider",
       "days": [
         {
           "date": "2026-09-19",
@@ -233,13 +237,13 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 ---
 
-## 5. Algorithm Logic Summary (Phase 2 Track 1)
+## 5. Algorithm Logic Summary (Phase 3)
 
 0. **Day Splitting (runs first):** Cluster every candidate by coordinate into as many groups as there are travel days, targeting the normal four places per day. Exhaustive search supports at most six places per day (`6! = 720`). Reject larger inputs explicitly; never truncate or discard candidates. Every day starts at `start_location` and ends at `end_location`.
 
 1. **Two-Track Routing Strategy:**
 * **Track 1 (Fast Permutation Calculation):** Use static average travel times to evaluate every permutation, up to 720 combinations for six places, and isolate the optimal orders.
-* **Track 2 (Precise Timeline Generation):** Run dynamic transit/car routing APIs sequentially only on the winning routes to construct accurate step-by-step timetables. Cache by `(origin, destination, mode)` so the two options share calls on legs they have in common.
+* **Track 2 (Precise Timeline Generation):** Retain the top three Track 1 candidates per objective and day. Route only their legs through ODsay or Kakao Mobility, rebuild timelines, revalidate every constraint, and rerank using precise totals. Successful legs use a 30-minute in-memory cache keyed by directed coordinates and mode. No network call occurs during permutation search.
 
 
 2. **Hard Constraint Validation:**
@@ -259,3 +263,7 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 
 4. **Conflict Diagnosis (before the permutation search):** Compare every pair of reserved places within each allocated day. Determine the chronologically earlier reservation first, then check its minimum stay plus travel against the later window end. Return `TIME_CONFLICT` naming both places when impossible. Other infeasibility returns `NO_ROUTE`.
+
+5. **Track 2 Failure Policy:** A provider no-route result invalidates that precise candidate and advances to the next bounded candidate. If none survive, return `PRECISE_ROUTE_INFEASIBLE`. Timeouts, rate limits, malformed responses, and temporary upstream failures return the Track 1 routes with an explicit `ROUTING_FALLBACK` warning. Missing configuration and authentication errors remain visible service failures.
+
+6. **Precise Cost Semantics:** ODsay's reported `payment` is the transit fare; when absent, use the Track 1 fare estimate and emit `ESTIMATED_TRANSIT_FARE`. Driving cost is estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll, without taxi fare.

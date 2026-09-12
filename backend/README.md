@@ -1,12 +1,14 @@
 # SyncTrip Backend
 
-Phase 2 provides the FastAPI foundation, two place-information endpoints, and the complete deterministic Track 1 optimization engine used by the existing frontend.
+Phase 3 provides the FastAPI foundation, place-information endpoints, deterministic Track 1 optimization, and bounded Track 2 live-route refinement.
 
 ## Requirements
 
 - Python 3.11 or newer
 - Kakao Developers REST API key for live place search
 - Google Maps Platform API key with Places API (New) enabled for live business-hours lookup
+- Kakao Mobility Directions access on the Kakao REST key for live driving routes
+- ODsay server API key for live public-transit routes; English output must be enabled for that plan
 
 The application can start and serve `/health` without provider keys. A provider endpoint returns a clear `503 PROVIDER_NOT_CONFIGURED` response until its key is configured.
 
@@ -32,10 +34,11 @@ Fill in `.env`:
 ```dotenv
 KAKAO_REST_API_KEY=your_backend_only_key
 GOOGLE_PLACES_API_KEY=your_backend_only_key
+ODSAY_API_KEY=your_backend_only_key
 CORS_ORIGINS=http://localhost:5173,https://your-app.vercel.app
 ```
 
-Create the Kakao key in the [Kakao Developers console](https://developers.kakao.com/) and enable Places API (New) for the Google key in the [Google Maps Platform console](https://console.cloud.google.com/google/maps-apis/). Never add either key to the frontend or to a `VITE_` variable.
+Create the Kakao key in the [Kakao Developers console](https://developers.kakao.com/), enable Kakao Mobility Directions for that application, obtain an ODsay server key, and enable Places API (New) for the Google key in the [Google Maps Platform console](https://console.cloud.google.com/google/maps-apis/). Never add these keys to the frontend or to a `VITE_` variable.
 
 ## Run Locally
 
@@ -53,8 +56,7 @@ cd backend
 pytest
 ```
 
-Automated tests mock both providers and never make live Kakao or Google requests.
-Optimizer tests are entirely local and never call Kakao Mobility or ODsay.
+Automated tests mock every provider. They never make live Kakao, Google, Kakao Mobility, or ODsay requests.
 
 ## Endpoints
 
@@ -131,6 +133,18 @@ Track 1 multiplies Haversine distance by a 1.3 road-detour factor. Driving uses 
 
 Borda scores select candidates before optimization. Because every permutation contains the same candidate set, `sum(preference_score)` is constant and is intentionally not used as an order tiebreaker. Phase 2 schedules exactly `stay_time_min`; `stay_time_max` remains validated but optional stay extension is deferred.
 
+### Track 2 Refinement
+
+Track 2 begins only after Track 1 finishes exhaustive local search. It retains the top three candidates per objective and day by default, deduplicates their orders, routes their legs sequentially, rebuilds timelines, revalidates every constraint, and reranks valid survivors using precise totals. Configure the bound with `TRACK2_CANDIDATES_PER_OBJECTIVE`.
+
+Driving uses Kakao Mobility's recommended summary route. Duration is converted from seconds to whole minutes and distance from meters to kilometers. `total_cost` means estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll; taxi fare is not included.
+
+Transit uses ODsay's shortest `totalTime` route with `lang=1`. `payment` is used as the fare, and lane names become concise English instructions. If payment is absent, the Track 1 fare estimate is used and the route receives `ESTIMATED_TRANSIT_FARE`.
+
+Successful legs are cached in memory for 30 minutes by directed coordinates and transportation mode, allowing candidate routes and final options to share calls. These APIs do not accept a departure time in this integration, so the cache does not include one. Configure TTL and capacity with `ROUTING_CACHE_TTL_SECONDS` and `ROUTING_CACHE_MAX_ENTRIES`. Failures are not cached.
+
+Provider no-route results reject only that candidate. If no precise candidate survives, the API returns `PRECISE_ROUTE_INFEASIBLE`. Timeouts, rate limits, malformed responses, and temporary outages return Track 1 routes explicitly marked with `routing_source: "estimated"` and a `ROUTING_FALLBACK` warning. Missing keys and authentication failures remain service errors rather than being silently hidden. The frontend route card displays warnings.
+
 ### Business-Hours Normalization
 
 The frontend contract supports one opening and closing time, while Google may return different weekday hours, split periods, overnight schedules, or 24-hour operation. Phase 1 applies this deterministic strategy:
@@ -161,7 +175,8 @@ Authentication failures, rate limits, timeouts, malformed responses, missing con
 
 - Exhaustive search is limited to six places per allocated day (`6! = 720`).
 - Day assignment is geographic; reservations cannot be pinned to a specific date yet.
-- Travel duration, fare, and instructions are estimates. Kakao Mobility and ODsay routing are Phase 3 work.
+- Routing cache is process-local and is cleared on restart.
+- ODsay English output depends on the configured provider plan and service region.
 - `stay_time_max` is not used to extend visits with spare schedule slack.
 - No Firestore, authentication, maps, or image export is included.
 - Live provider behavior requires valid keys and provider-console configuration; automated tests validate adapters with mocked responses.
@@ -171,3 +186,5 @@ Authentication failures, rate limits, timeouts, malformed responses, missing con
 - [Kakao Local: Search place by keyword](https://developers.kakao.com/docs/en/local/dev-guide#search-by-keyword)
 - [Google Places API (New): Text Search](https://developers.google.com/maps/documentation/places/web-service/text-search)
 - [Google Places API (New): OpeningHours resource](https://developers.google.com/maps/documentation/places/web-service/reference/rest/v1/places#OpeningHours)
+- [Kakao Mobility: Driving Directions](https://developers.kakaomobility.com/guide/navi-api/directions)
+- [ODsay: Public Transit Route Search](https://lab.odsay.com/guide/releaseReference?platform=web)

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date, timedelta
 from itertools import permutations
 from typing import Literal
@@ -8,7 +9,9 @@ from app.models.optimize import (
     OptimizeResponse,
     OptimizeSuccessResponse,
     OptimizedDay,
+    Place,
     RouteOption,
+    RouteWarning,
 )
 from app.optimizer.conflict import find_reservation_conflict
 from app.optimizer.constraints import SimulatedDay, simulate_day
@@ -26,11 +29,20 @@ def _dates(request: OptimizeRequest) -> list[date]:
     return [settings.start_date + timedelta(days=offset) for offset in range(count)]
 
 
-def _route_option(
+@dataclass(frozen=True)
+class Track1Search:
+    dates: list[date]
+    buckets: list[list[Place]]
+    per_day: list[list[SimulatedDay]]
+
+
+def build_route_option(
     route_type: Literal["min_time", "min_cost"],
     label: str,
     dates: list[date],
     candidates: list[SimulatedDay],
+    routing_source: Literal["provider", "estimated"] | None = None,
+    warning: RouteWarning | None = None,
 ) -> RouteOption:
     days = [
         OptimizedDay(
@@ -47,10 +59,12 @@ def _route_option(
         total_time=sum(day.total_time for day in days),
         total_cost=sum(day.total_cost for day in days),
         days=days,
+        routing_source=routing_source,
+        warning=warning,
     )
 
 
-def optimize_trip(request: OptimizeRequest) -> OptimizeResponse:
+def run_track1_search(request: OptimizeRequest) -> Track1Search | OptimizeErrorResponse:
     dates = _dates(request)
     try:
         buckets = split_places_by_day(request.places, len(dates))
@@ -84,11 +98,22 @@ def optimize_trip(request: OptimizeRequest) -> OptimizeResponse:
             )
         per_day.append(candidates)
 
-    time_days = select_objective_days(per_day, time_rank)
-    cost_days = select_distinct_cost_days(per_day, time_days)
+    return Track1Search(dates=dates, buckets=buckets, per_day=per_day)
+
+
+def build_track1_response(search: Track1Search) -> OptimizeSuccessResponse:
+    time_days = select_objective_days(search.per_day, time_rank)
+    cost_days = select_distinct_cost_days(search.per_day, time_days)
     return OptimizeSuccessResponse(
         routes=[
-            _route_option("min_time", "Fastest Route", dates, time_days),
-            _route_option("min_cost", "Lowest-Cost Route", dates, cost_days),
+            build_route_option("min_time", "Fastest Route", search.dates, time_days),
+            build_route_option("min_cost", "Lowest-Cost Route", search.dates, cost_days),
         ]
     )
+
+
+def optimize_trip(request: OptimizeRequest) -> OptimizeResponse:
+    search = run_track1_search(request)
+    if isinstance(search, OptimizeErrorResponse):
+        return search
+    return build_track1_response(search)

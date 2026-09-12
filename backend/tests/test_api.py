@@ -166,9 +166,8 @@ def test_optimize_accepts_exact_frontend_build_body_shape(client):
     body = response.json()
     assert body["status"] == "success"
     assert [route["type"] for route in body["routes"]] == ["min_time", "min_cost"]
-    assert body["routes"][0]["days"][0]["timeline"][1]["instruction"].startswith(
-        "Estimated"
-    )
+    assert body["routes"][0]["routing_source"] == "provider"
+    assert body["routes"][0]["days"][0]["timeline"][1]["instruction"] == "Provider route"
 
 
 def test_optimize_infeasibility_is_http_200_structured_error(client):

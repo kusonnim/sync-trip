@@ -114,12 +114,19 @@ class OptimizedDay(BaseModel):
     timeline: list[TimelineEntry]
 
 
+class RouteWarning(BaseModel):
+    code: Literal["ROUTING_FALLBACK", "ESTIMATED_TRANSIT_FARE"]
+    message: str
+
+
 class RouteOption(BaseModel):
     type: Literal["min_time", "min_cost"]
     label: str
     total_time: int = Field(ge=0)
     total_cost: int = Field(ge=0)
     days: list[OptimizedDay]
+    routing_source: Literal["provider", "estimated"] | None = None
+    warning: RouteWarning | None = None
 
 
 class OptimizeSuccessResponse(BaseModel):
@@ -129,7 +136,12 @@ class OptimizeSuccessResponse(BaseModel):
 
 class OptimizeErrorResponse(BaseModel):
     status: Literal["error"] = "error"
-    code: Literal["TIME_CONFLICT", "NO_ROUTE", "TOO_MANY_PLACES"]
+    code: Literal[
+        "TIME_CONFLICT",
+        "NO_ROUTE",
+        "TOO_MANY_PLACES",
+        "PRECISE_ROUTE_INFEASIBLE",
+    ]
     message: str
     place_ids: list[str] = Field(default_factory=list)
 

@@ -41,6 +41,8 @@ export default function RouteCard({ route, open, onToggle, votes, onVote, myVote
         </div>
       </div>
 
+      {route.warning && <div className="notice warn" style={{ marginTop: 12 }}>{route.warning.message}</div>}
+
       {open && (
         <div style={{ marginTop: 16 }}>
           {route.days.map((day) => (

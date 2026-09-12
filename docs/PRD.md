@@ -4,7 +4,7 @@
 
 This product definition combines three source materials: the original planning document, handwritten notes, and the user-flow diagram. [PROJECT.md](../PROJECT.md) is the canonical source for API contracts and algorithm behavior; if this document differs, follow PROJECT.md.
 
-The frontend supports the complete ten-step flow. The Phase 2 backend provides Kakao place search, Google business-hours lookup, and Track 1 route optimization. The frontend mock remains an offline development fallback.
+The frontend supports the complete ten-step flow. The Phase 3 backend provides Kakao place search, Google business-hours lookup, Track 1 local optimization, and Track 2 live routing refinement. The frontend mock remains an offline development fallback.
 
 **Problem:** Place links pile up in group chats without producing a finalized plan. Existing travel apps usually sort by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM.
 
@@ -158,14 +158,14 @@ If both objectives choose the same permutation, use the next-ranked valid `min_c
 
 ### 4.3 Track 2 — Precise Routing
 
-Call live routing APIs only for legs in the selected permutations. A five-place day has six legs. Cache shared legs between the two route options by `(origin coordinates, destination coordinates, transportation mode)`. A three-day trip should require roughly 20–40 calls.
+Retain at most three Track 1 candidates per objective and day, then call live routing APIs only for legs in their deduplicated union. A five-place day has six legs. Cache successful shared legs for 30 minutes by directed origin coordinates, destination coordinates, and transportation mode. Neither provider accepts a departure time in the selected API, so it is not part of this cache key. Provider failures are never cached.
 
 - Public transit: ODsay `searchPubTransPathT` for time, transfers, line names, and fares
-- Driving: Kakao Mobility `directions` for distance, time, and tolls; estimate fuel as `distance × ₩140/km`
+- Driving: Kakao Mobility `directions` for distance, time, and tolls; cost is operating cost (`distance × ₩140/km`) plus tolls
 
-If live travel time breaks a constraint that the estimate satisfied, add a `warning` flag to the route card and retry once with the next-ranked permutation. Do not recalculate indefinitely.
+Rebuild each precise timeline from scratch so changed arrival times also change waiting and feasibility. Revalidate business hours, reservations, meal windows, minimum stays, and the daily deadline. Rerank all refined survivors using precise time and cost. A provider no-route response advances to the next bounded candidate; if none survive, return `PRECISE_ROUTE_INFEASIBLE`.
 
-Track 2 belongs in the backend and is not implemented. The current timeline uses Track 1 estimates.
+ODsay's `payment` is the transit fare. When omitted, the Track 1 fare estimate is used with an `ESTIMATED_TRANSIT_FARE` warning. Temporary provider failures return Track 1 routes with `routing_source: "estimated"` and a visible `ROUTING_FALLBACK` warning. Missing keys and authentication failures are not silently hidden.
 
 ### 4.4 Conflict Diagnosis
 
@@ -214,11 +214,10 @@ The frontend portion of the nine-hour build is complete. Remaining work is split
 
 | Priority | Work | Owner | Notes |
 |---:|---|---|---|
-| 1 | Connect deployed frontend and backend through `VITE_API_BASE` | Shared | Backend contract is ready |
-| 2 | Track 2 live routing with ODsay and Kakao Mobility | Backend | Adds provider route details |
-| 3 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
-| 4 | Map markers and routes | Frontend | Above the cut line if time remains |
-| 5 | Result-image export | Frontend | First feature to drop |
+| 1 | Connect deployed frontend and backend through `VITE_API_BASE` and provider credentials | Shared | Backend contract is ready |
+| 2 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
+| 3 | Map markers and routes | Frontend | Above the cut line if time remains |
+| 4 | Result-image export | Frontend | First feature to drop |
 
 Firestore appears lower in this list, but it is required for a multi-device demo. A two-tab demo on one machine works with the current implementation, so choose the demo format before reprioritizing.
 
@@ -234,10 +233,11 @@ Firestore appears lower in this list, but it is required for a multi-device demo
 - Phase 1 backend tests with mocked provider calls
 - Phase 2 Track 1 backend optimizer and `POST /api/optimize`
 - Deterministic day assignment, exhaustive permutation search, constraint simulation, and conflict diagnosis
+- Phase 3 cached Kakao Mobility and ODsay adapters with bounded precise-candidate refinement
 
 ### Cut Line
 
-**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. The frontend and Phase 2 backend now meet this line; the temporary frontend engine remains available for an offline demo.
+**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. The frontend and Phase 3 backend now meet this line; the temporary frontend engine remains available for an offline demo.
 
 **Drop in this order if delayed:**
 
@@ -245,7 +245,7 @@ Firestore appears lower in this list, but it is required for a multi-device demo
 2. Map routes
 3. Google Places hours; use category defaults and manual entry
 4. Firestore; demonstrate with localStorage in one browser
-5. Track 2 live routing; show Track 1 estimates without line details
+5. Live provider routing; show explicitly marked Track 1 estimates instead
 
 Dropping Track 2 removes the public-transit accuracy claim, so remove maps and image export first.
 
@@ -253,7 +253,7 @@ Dropping Track 2 removes the public-transit accuracy claim, so remove maps and i
 
 ## 7. Verification
 
-**Algorithm checks:** `npm run check` runs the original 14 frontend checks without external APIs. The backend pytest suite adds regression coverage for Phase 2 behavior and also makes no routing-provider calls.
+**Algorithm checks:** `npm run check` runs the original 14 frontend checks without external APIs. The backend pytest suite covers both optimizer tracks, mocked provider normalization, caching, call bounds, precise constraint revalidation, retry, and fallback without live provider calls.
 
 1. A reserved place starts within its reservation window.
 2. A permutation that cannot fit the minimum stay before closing is rejected with `NO_ROUTE`.
@@ -272,4 +272,4 @@ Dropping Track 2 removes the public-transit accuracy claim, so remove maps and i
 
 ## 8. Judging Pitch
 
-“Existing apps sort places by distance. SyncTrip combines multiple travelers' preferences, applies reservation and closing times as hard constraints, and mathematically rejects impossible schedules. Querying every public-transit order would be slow, so its two-track architecture selects the order with static estimates and calls the live routing API only for the winning routes, balancing speed with accuracy. When a schedule is impossible, SyncTrip identifies the exact pair of places in conflict instead of returning a generic failure.”
+“Existing apps sort places by distance. SyncTrip combines multiple travelers' preferences, applies reservation and closing times as hard constraints, and mathematically rejects impossible schedules. Querying every public-transit order would be slow, so its two-track architecture narrows the search with static estimates and calls live routing only for a bounded candidate set, balancing speed with accuracy. When a schedule is impossible, SyncTrip identifies the exact pair of places in conflict instead of returning a generic failure.”
