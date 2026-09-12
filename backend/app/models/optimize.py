@@ -14,6 +14,16 @@ def time_to_minutes(value: str) -> int:
     return parsed.hour * 60 + parsed.minute
 
 
+# A day that owns neither the trip's arrival time nor its return deadline runs on
+# these hours instead.
+DAY_START_DEFAULT = "09:00"
+DAY_END_DEFAULT = "22:00"
+LAST_MINUTE_OF_DAY = 23 * 60 + 59
+# Below this, the first or last day is a dash to or from the trip rather than
+# a day out, so it keeps the open clock it needs to fit.
+MIN_PLANNABLE_DAY = 2 * 60
+
+
 class Location(BaseModel):
     name: str = Field(min_length=1)
     lat: float = Field(ge=-90, le=90)
@@ -114,16 +124,26 @@ class TripSettings(BaseModel):
         """Per-day planning bounds for trip-level arrival and return times.
 
         On a multi-day trip, ``start_time`` belongs only to the first day and
-        ``end_deadline`` only to the last. Interior day bounds span the day.
+        ``end_deadline`` only to the last. The days in between have neither, so
+        they run on an ordinary day's hours: out of the accommodation in the
+        morning and back to it by evening. Spanning midnight to midnight instead
+        would let a day begin at 00:00, which is not a plan anyone would follow.
         """
         start = time_to_minutes(self.start_time)
         deadline = time_to_minutes(self.end_deadline)
         if self.day_count == 1:
             return [(start, deadline)]
+        morning = time_to_minutes(DAY_START_DEFAULT)
+        evening = time_to_minutes(DAY_END_DEFAULT)
+        # A late arrival or an early return is the whole point of those two fields.
+        # Ordinary hours only apply to an edge day that still has enough of the day
+        # left to be planned as one; otherwise the clock opens so the day can fit.
+        first_end = evening if evening - start >= MIN_PLANNABLE_DAY else LAST_MINUTE_OF_DAY
+        last_start = morning if deadline - morning >= MIN_PLANNABLE_DAY else 0
         return [
-            (start, 23 * 60 + 59),
-            *[(0, 23 * 60 + 59)] * (self.day_count - 2),
-            (0, deadline),
+            (start, first_end),
+            *[(morning, evening)] * (self.day_count - 2),
+            (last_start, deadline),
         ]
 
     @model_validator(mode="after")

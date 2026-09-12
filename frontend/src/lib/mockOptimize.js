@@ -9,6 +9,12 @@ import { toMinutes, toHHMM, daysBetween, listDates } from './time.js';
 const DETOUR = 1.3;
 const SPEED = { car: 40, transit: 22 }; // km/h
 const WAIT = { car: 0, transit: 8 }; // minutes
+// A day that owns neither the trip's arrival time nor its return deadline runs on
+// these hours instead. Spanning midnight would let a day begin at 00:00.
+const DAY_START_DEFAULT = toMinutes('09:00');
+const DAY_END_DEFAULT = toMinutes('22:00');
+const LAST_MINUTE_OF_DAY = toMinutes('23:59');
+const MIN_PLANNABLE_DAY = 120;
 const LUNCH = [toMinutes('11:30'), toMinutes('13:30')];
 const DINNER = [toMinutes('17:30'), toMinutes('19:30')];
 const MAX_PER_DAY = 4;
@@ -279,11 +285,15 @@ export function optimizeLocally(body) {
   const buckets = splitByDay([...places], dates.length);
   const tripStart = toMinutes(settings.start_time);
   const tripDeadline = toMinutes(settings.end_deadline);
+  // An arrival after the ordinary evening, or a return before the ordinary morning,
+  // is the whole point of those two fields. Those days get the full clock instead.
+  const firstEnd = DAY_END_DEFAULT - tripStart >= MIN_PLANNABLE_DAY ? DAY_END_DEFAULT : LAST_MINUTE_OF_DAY;
+  const lastStart = tripDeadline - DAY_START_DEFAULT >= MIN_PLANNABLE_DAY ? DAY_START_DEFAULT : 0;
   const timeBounds = dates.map((_, dayIndex) => {
     if (dates.length === 1) return [tripStart, tripDeadline];
-    if (dayIndex === 0) return [tripStart, 23 * 60 + 59];
-    if (dayIndex === dates.length - 1) return [0, tripDeadline];
-    return [0, 23 * 60 + 59];
+    if (dayIndex === 0) return [tripStart, firstEnd];
+    if (dayIndex === dates.length - 1) return [lastStart, tripDeadline];
+    return [DAY_START_DEFAULT, DAY_END_DEFAULT];
   });
   const anchors = dayAnchors(settings, dates.length);
 

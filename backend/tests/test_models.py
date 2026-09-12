@@ -104,7 +104,27 @@ def test_multi_day_return_clock_can_precede_first_day_arrival_clock():
     data["start_time"] = "10:00"
     data["end_deadline"] = "09:00"
     parsed = TripSettings(**data)
-    assert parsed.day_time_bounds() == [(600, 1439), (0, 540)]
+    # Home by 09:00 leaves no day to plan, so the last day keeps the open clock.
+    assert parsed.day_time_bounds() == [(600, 1320), (0, 540)]
+
+
+def test_a_day_in_the_middle_runs_on_ordinary_hours():
+    data = valid_settings()
+    data["end_date"] = "2026-09-22"
+    data["start_time"] = "10:00"
+    data["end_deadline"] = "21:00"
+    bounds = TripSettings(**data).day_time_bounds()
+    # No day begins at midnight: the trip's arrival time belongs to the first day
+    # and its return deadline to the last, and the days between run 09:00 to 22:00.
+    assert bounds == [(600, 1320), (540, 1320), (540, 1320), (540, 1260)]
+    assert all(start > 0 for start, _ in bounds)
+
+
+def test_an_arrival_too_late_for_ordinary_hours_keeps_the_open_clock():
+    data = valid_settings()
+    data["start_time"] = "23:00"
+    parsed = TripSettings(**data)
+    assert parsed.day_time_bounds()[0] == (1380, 1439)
 
 
 def test_closing_before_opening_is_rejected():
