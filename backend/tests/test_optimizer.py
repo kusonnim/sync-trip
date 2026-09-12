@@ -157,6 +157,11 @@ def _terminal_names(day: dict) -> tuple[str, str]:
     return stops[0]["name"], stops[-1]["name"]
 
 
+def _terminal_coords(day: dict) -> tuple[tuple[float, float], tuple[float, float]]:
+    stops = [item for item in day["timeline"] if item["type"] == "place"]
+    return (stops[0]["lat"], stops[0]["lng"]), (stops[-1]["lat"], stops[-1]["lng"])
+
+
 def test_a_middle_day_starts_and_ends_at_the_accommodation():
     result = response_dict(
         optimize_trip(
@@ -170,6 +175,51 @@ def test_a_middle_day_starts_and_ends_at_the_accommodation():
     assert _terminal_names(days[0]) == ("Seoul Station", "Myeongdong Hotel")
     assert _terminal_names(days[1]) == ("Myeongdong Hotel", "Myeongdong Hotel")
     assert _terminal_names(days[2]) == ("Myeongdong Hotel", "Seoul Station")
+    assert _terminal_coords(days[0]) == ((37.5547, 126.9707), (37.5636, 126.9827))
+    assert _terminal_coords(days[1]) == ((37.5636, 126.9827), (37.5636, 126.9827))
+    assert _terminal_coords(days[2]) == ((37.5636, 126.9827), (37.5547, 126.9707))
+
+
+def test_multiple_intermediate_days_all_start_and_end_at_accommodation():
+    hotel = {"name": "Grand Hotel", "lat": 37.52, "lng": 126.92}
+    result = response_dict(
+        optimize_trip(
+            request(
+                [place(str(index), lat=37.50 + index / 100) for index in range(6)],
+                end_date="2026-09-22",
+                accommodations=[hotel],
+            )
+        )
+    )
+    days = result["routes"][0]["days"]
+    assert len(days) == 4
+    # Day 1: start_location -> hotel
+    assert _terminal_names(days[0]) == ("Seoul Station", "Grand Hotel")
+    assert _terminal_coords(days[0]) == ((37.5547, 126.9707), (37.52, 126.92))
+    # Intermediate days (Day 2 and Day 3): hotel -> hotel
+    for intermediate_day in (days[1], days[2]):
+        assert _terminal_names(intermediate_day) == ("Grand Hotel", "Grand Hotel")
+        assert _terminal_coords(intermediate_day) == ((37.52, 126.92), (37.52, 126.92))
+    # Final day (Day 4): hotel -> end_location
+    assert _terminal_names(days[3]) == ("Grand Hotel", "Seoul Station")
+    assert _terminal_coords(days[3]) == ((37.52, 126.92), (37.5547, 126.9707))
+
+
+def test_accommodation_singular_and_hotel_aliases_anchor_intermediate_days():
+    boutique = {"name": "Boutique Stay", "lat": 37.51, "lng": 126.91}
+    result = response_dict(
+        optimize_trip(
+            request(
+                [place("1"), place("2"), place("3")],
+                end_date="2026-09-21",
+                accommodation=boutique,
+            )
+        )
+    )
+    days = result["routes"][0]["days"]
+    assert len(days) == 3
+    assert _terminal_names(days[1]) == ("Boutique Stay", "Boutique Stay")
+    assert _terminal_coords(days[1]) == ((37.51, 126.91), (37.51, 126.91))
 
 
 def test_each_accommodation_anchors_its_own_night():

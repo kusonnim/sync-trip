@@ -37,7 +37,7 @@ def settings(**overrides) -> TripSettings:
     }
     data.update(overrides)
     # Every night needs an accommodation, so supply one unless a test names its own.
-    if "accommodations" not in data:
+    if "accommodations" not in data and "accommodation" not in data and "hotel" not in data:
         nights = (date.fromisoformat(str(data["end_date"])) - date.fromisoformat(str(data["start_date"]))).days
         data["accommodations"] = [HOTEL] if nights > 0 else []
     return TripSettings(**data)

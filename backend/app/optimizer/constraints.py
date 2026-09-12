@@ -47,11 +47,20 @@ def resolve_visit_start(place: Place, arrival: int) -> int | None:
 def simulate_day(
     order: tuple[Place, ...],
     settings: TripSettings,
-    anchors: tuple[Location, Location] | None = None,
+    anchors: tuple[Location, Location] | int | None = None,
+    day_index: int | None = None,
 ) -> SimulatedDay | None:
     """Walk one day in order. `anchors` is where that day begins and ends, which
     is the accommodation on every day but the first and the last."""
-    origin, terminus = anchors if anchors else (settings.start_location, settings.end_location)
+    if day_index is not None:
+        origin, terminus = settings.day_anchors()[day_index]
+    elif isinstance(anchors, int):
+        origin, terminus = settings.day_anchors()[anchors]
+    elif anchors:
+        origin, terminus = anchors
+    else:
+        origin, terminus = (settings.start_location, settings.end_location)
+
     mode = settings.transport_mode
     cursor = time_to_minutes(settings.start_time)
     deadline = time_to_minutes(settings.end_deadline)
@@ -62,6 +71,8 @@ def simulate_day(
         {
             "type": "place",
             "name": origin.name,
+            "lat": origin.lat,
+            "lng": origin.lng,
             "time": format_minutes(cursor),
         }
     ]
@@ -89,6 +100,8 @@ def simulate_day(
                     "place_id": place.place_id,
                     "name": place.name,
                     "category": place.category,
+                    "lat": place.lat,
+                    "lng": place.lng,
                     "time": f"{format_minutes(start)} ~ {format_minutes(departure)}",
                     "stay_duration": place.stay_time_min,
                     "wait_duration": start - arrival,
@@ -121,6 +134,8 @@ def simulate_day(
             {
                 "type": "place",
                 "name": terminus.name,
+                "lat": terminus.lat,
+                "lng": terminus.lng,
                 "time": format_minutes(finish),
             },
         ]

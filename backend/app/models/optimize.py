@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -62,6 +62,8 @@ class TripSettings(BaseModel):
     end_deadline: str
     # Where the group sleeps. One entry covers every night; more entries are used
     # in order, one per night, so a trip can move between accommodations.
+    accommodation: Location | None = None
+    hotel: Location | None = None
     accommodations: list[Location] = Field(default_factory=list)
 
     @property
@@ -71,6 +73,18 @@ class TripSettings(BaseModel):
     @property
     def night_count(self) -> int:
         return self.day_count - 1
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_accommodations(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            acc = data.get("accommodation") or data.get("hotel")
+            if acc is not None and not data.get("accommodations"):
+                if isinstance(acc, list):
+                    data["accommodations"] = acc
+                else:
+                    data["accommodations"] = [acc]
+        return data
 
     def day_anchors(self) -> list[tuple[Location, Location]]:
         """Where each day begins and ends.
@@ -82,8 +96,13 @@ class TripSettings(BaseModel):
         nights = self.night_count
         if nights == 0:
             return [(self.start_location, self.end_location)]
+        accommodations = self.accommodations
+        if not accommodations and (self.accommodation or self.hotel):
+            accommodations = [self.accommodation or self.hotel]
+        if not accommodations:
+            return [(self.start_location, self.end_location)] * self.day_count
         stays = [
-            self.accommodations[min(night, len(self.accommodations) - 1)]
+            accommodations[min(night, len(accommodations) - 1)]
             for night in range(nights)
         ]
         anchors = [(self.start_location, stays[0])]
@@ -99,6 +118,9 @@ class TripSettings(BaseModel):
             raise ValueError("end_date must be on or after start_date")
         if deadline < start:
             raise ValueError("end_deadline must be at or after start_time")
+        if (self.accommodation or self.hotel) and not self.accommodations:
+            acc = self.accommodation or self.hotel
+            self.accommodations = [acc]
         nights = self.night_count
         if nights == 0 and self.accommodations:
             raise ValueError("a single-day trip has no night to accommodate")
@@ -136,6 +158,8 @@ class PlaceTimelineEntry(BaseModel):
     type: Literal["place"] = "place"
     name: str
     time: str
+    lat: float | None = None
+    lng: float | None = None
     place_id: str | None = None
     category: Category | None = None
     stay_duration: int | None = Field(default=None, ge=0)

@@ -89,7 +89,7 @@ function instructionFor(mode) {
 function simulate(order, ctx, anchors) {
   const { mode, startAt, deadline } = ctx;
   const [origin, destination] = anchors;
-  const timeline = [{ type: 'place', name: origin.name, time: toHHMM(startAt) }];
+  const timeline = [{ type: 'place', name: origin.name, lat: origin.lat, lng: origin.lng, time: toHHMM(startAt) }];
   let cursor = startAt;
   let prev = origin;
   let totalTime = 0;
@@ -117,6 +117,8 @@ function simulate(order, ctx, anchors) {
       place_id: place.place_id,
       name: place.name,
       category: place.category,
+      lat: place.lat,
+      lng: place.lng,
       time: `${toHHMM(start)} ~ ${toHHMM(start + stay)}`,
       stay_duration: stay,
       wait_duration: start - arrive,
@@ -142,7 +144,7 @@ function simulate(order, ctx, anchors) {
     duration: back.minutes,
     cost: back.cost,
   });
-  timeline.push({ type: 'place', name: destination.name, time: toHHMM(finish) });
+  timeline.push({ type: 'place', name: destination.name, lat: destination.lat, lng: destination.lng, time: toHHMM(finish) });
 
   return {
     order: order.map((p) => p.place_id).join('>'),
@@ -223,7 +225,12 @@ function splitByDay(places, dayCount) {
 function dayAnchors(settings, dayCount) {
   const nights = dayCount - 1;
   if (nights <= 0) return [[settings.start_location, settings.end_location]];
-  const stays = settings.accommodations ?? [];
+  const stays = (settings.accommodations && settings.accommodations.length > 0)
+    ? settings.accommodations
+    : (settings.accommodation ? [settings.accommodation] : (settings.hotel ? [settings.hotel] : []));
+  if (stays.length === 0) {
+    return Array.from({ length: dayCount }, () => [settings.start_location, settings.end_location]);
+  }
   const nightly = Array.from({ length: nights }, (_, night) => stays[Math.min(night, stays.length - 1)]);
   const anchors = [[settings.start_location, nightly[0]]];
   for (let night = 1; night < nights; night += 1) anchors.push([nightly[night - 1], nightly[night]]);
