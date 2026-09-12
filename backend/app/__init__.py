@@ -1,0 +1,1 @@
+"""SyncTrip backend application package."""

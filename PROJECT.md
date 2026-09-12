@@ -31,10 +31,10 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the frontend exists and runs the whole flow on its own. The backend folder is not
-written yet. Until it is, the frontend answers its own `/api/optimize` calls with a stand-in engine
-(`src/lib/mockOptimize.js`) that speaks exactly the contract in section 4, so swapping in the real
-backend is a one-line environment change (`VITE_API_BASE`).
+**Build status:** the frontend runs the whole flow on its own. The Phase 1 backend provides the
+FastAPI application, health check, Kakao Local search proxy, and Google Places business-hours
+lookup. Route optimization is not implemented in the backend yet, so the frontend continues to
+answer `/api/optimize` with `src/lib/mockOptimize.js` until Phase 2.
 
 ```text
 📦 SyncTrip
@@ -54,10 +54,12 @@ backend is a one-line environment change (`VITE_API_BASE`).
  ┃ ┃ ┗ 📜 check-optimizer.mjs # Constraint checks, run with `npm run check`
  ┃ ┗ 📜 package.json
  ┃
- ┗ 📂 backend/ (Python FastAPI) — not written yet
+ ┗ 📂 backend/ (Python FastAPI) — Phase 1 place information APIs
    ┣ 📂 app/
-   ┃ ┣ 📜 main.py          # FastAPI app execution and CORS setup
-   ┃ ┗ 📜 optimizer.py     # Two-Track routing & Hard Constraint filtering algorithm
+   ┃ ┣ 📜 main.py          # FastAPI application and CORS setup
+   ┃ ┣ 📂 api/             # Search and business-hours routes
+   ┃ ┣ 📂 models/          # API and future optimization request models
+   ┃ ┗ 📂 services/        # Kakao Local and Google Places adapters
    ┣ 📜 requirements.txt   # FastAPI, Uvicorn, Requests, etc.
    ┗ 📜 .env               # API Key storage (never committed)
 
