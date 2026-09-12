@@ -32,6 +32,7 @@ def settings() -> Settings:
         kakao_rest_api_key="test-kakao-key",
         google_places_api_key="test-google-key",
         odsay_api_key="test-odsay-key",
+        odsay_referer="https://frontend.example.com",
         cors_origins="http://localhost:5173,https://sync-trip.vercel.app",
     )
 

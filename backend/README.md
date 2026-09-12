@@ -8,7 +8,7 @@ The production-configurable FastAPI service provides place-information endpoints
 - Kakao Developers REST API key for live place search
 - Google Maps Platform API key with Places API (New) enabled for live business-hours lookup
 - Kakao Mobility Directions access on the Kakao REST key for live driving routes
-- ODsay server API key for live public-transit routes; English output must be enabled for that plan
+- ODsay Web Key and its registered frontend URI for live public-transit routes; English output must be enabled for that plan
 
 The application can start and serve `/health` without provider keys. A provider endpoint returns a clear `503 PROVIDER_NOT_CONFIGURED` response until its key is configured.
 
@@ -35,10 +35,11 @@ Fill in `.env`:
 KAKAO_REST_API_KEY=your_backend_only_key
 GOOGLE_PLACES_API_KEY=your_backend_only_key
 ODSAY_API_KEY=your_backend_only_key
+ODSAY_REFERER=https://your-frontend.example.com
 CORS_ORIGINS=http://localhost:5173,https://your-app.vercel.app
 ```
 
-Create the Kakao key in the [Kakao Developers console](https://developers.kakao.com/), enable Kakao Mobility Directions for that application, obtain an ODsay server key, and enable Places API (New) for the Google key in the [Google Maps Platform console](https://console.cloud.google.com/google/maps-apis/). Never add these keys to the frontend or to a `VITE_` variable.
+Create the Kakao key in the [Kakao Developers console](https://developers.kakao.com/), enable Kakao Mobility Directions for that application, obtain an ODsay Web Key and register the frontend origin as its service URI, and enable Places API (New) for the Google key in the [Google Maps Platform console](https://console.cloud.google.com/google/maps-apis/). Never add these keys to the frontend or to a `VITE_` variable.
 
 ## Run Locally
 
@@ -139,7 +140,7 @@ Track 2 begins only after Track 1 finishes exhaustive local search. It retains t
 
 Driving uses Kakao Mobility's recommended summary route. Duration is converted from seconds to whole minutes and distance from meters to kilometers. `total_cost` means estimated operating cost (`distance_km × CAR_COST_PER_KM_KRW`) plus Kakao's reported toll; taxi fare is not included.
 
-Transit uses ODsay's shortest `totalTime` route with `lang=1`. `payment` is used as the fare, and lane names become concise English instructions. If payment is absent, the Track 1 fare estimate is used and the route receives `ESTIMATED_TRANSIT_FARE`.
+Transit uses ODsay's shortest `totalTime` route with `lang=1`. The Web Key remains the `apiKey` query parameter, and every request supplies the validated `ODSAY_REFERER` origin as its `Referer` header for URI authentication. Missing or invalid configuration returns `PROVIDER_NOT_CONFIGURED`; no Referer is inferred or hard-coded. `payment` is used as the fare, and lane names become concise English instructions. If payment is absent, the Track 1 fare estimate is used and the route receives `ESTIMATED_TRANSIT_FARE`.
 
 Successful legs are cached in memory for 30 minutes by directed coordinates and transportation mode, allowing candidate routes and final options to share calls. These APIs do not accept a departure time in this integration, so the cache does not include one. Configure TTL and capacity with `ROUTING_CACHE_TTL_SECONDS` and `ROUTING_CACHE_MAX_ENTRIES`. Failures are not cached.
 
@@ -186,7 +187,7 @@ Authentication failures, rate limits, timeouts, malformed responses, missing con
 
 `backend/Dockerfile` uses Python 3.12, installs `requirements.txt`, starts Uvicorn on `$PORT` (default 8000), and exposes `/health`. Build from the backend directory with `docker build -t synctrip-api .`. The same image can run on any container host; the root `render.yaml` is an optional Render blueprint.
 
-Set the three provider keys and all tuning variables shown in `.env.example`. Set `CORS_ORIGINS=https://<frontend-domain>,http://localhost:5173`; empty origins, invalid origins, and `*` are rejected. Provider credentials are optional at process start, so `/health` works before live integrations are configured.
+Set the three provider keys and all tuning variables shown in `.env.example`. For ODsay, set `ODSAY_API_KEY` to the Web Key and `ODSAY_REFERER` to the exact origin registered as the Web application's service URI (scheme and host, with an optional port but no path, query, fragment, or credentials). Set `CORS_ORIGINS=https://<frontend-domain>,http://localhost:5173`; empty origins, invalid origins, and `*` are rejected. Provider credentials are optional at process start, so `/health` works before live integrations are configured.
 
 ## Official Provider References
 

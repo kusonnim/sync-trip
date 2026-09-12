@@ -131,6 +131,10 @@ class ODsayService:
         secret = self._settings.odsay_api_key
         if secret is None or not secret.get_secret_value():
             raise MissingProviderKey("ODsay")
+        referer = self._settings.odsay_referer_origin
+        if referer is None:
+            raise MissingProviderKey("ODsay Referer")
+        headers = {"Referer": referer}
         params = {
             "apiKey": secret.get_secret_value(),
             "lang": 1,
@@ -145,12 +149,12 @@ class ODsayService:
         }
         try:
             if self._client is not None:
-                response = await self._client.get(ODSAY_TRANSIT_URL, params=params)
+                response = await self._client.get(ODSAY_TRANSIT_URL, params=params, headers=headers)
             else:
                 async with httpx.AsyncClient(
                     timeout=self._settings.routing_timeout_seconds
                 ) as client:
-                    response = await client.get(ODSAY_TRANSIT_URL, params=params)
+                    response = await client.get(ODSAY_TRANSIT_URL, params=params, headers=headers)
         except httpx.TimeoutException as exc:
             logger.warning("ODsay request timed out")
             raise ProviderTimeoutError("ODsay") from exc
