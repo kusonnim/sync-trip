@@ -109,3 +109,102 @@ def test_cors_uses_configured_origin(client):
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "https://sync-trip.vercel.app"
     assert response.headers["access-control-allow-credentials"] == "true"
+
+
+def test_cors_allows_frontend_optimize_post(client):
+    response = client.options(
+        "/api/optimize",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_optimize_accepts_exact_frontend_build_body_shape(client):
+    response = client.post(
+        "/api/optimize",
+        json={
+            "settings": {
+                "transport_mode": "transit",
+                "start_date": "2026-09-19",
+                "end_date": "2026-09-19",
+                "start_location": {
+                    "name": "Seoul Station",
+                    "lat": 37.5547,
+                    "lng": 126.9707,
+                },
+                "end_location": {
+                    "name": "Hotel",
+                    "lat": 37.56,
+                    "lng": 126.98,
+                },
+                "start_time": "10:00",
+                "end_deadline": "21:30",
+            },
+            "places": [
+                {
+                    "place_id": "p1",
+                    "name": "Example Cafe",
+                    "category": "cafe",
+                    "lat": 37.56,
+                    "lng": 126.98,
+                    "stay_time_min": 60,
+                    "stay_time_max": 90,
+                    "open_time": "10:00",
+                    "close_time": "22:00",
+                    "hard_constraint": None,
+                    "preference_score": 12,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "success"
+    assert [route["type"] for route in body["routes"]] == ["min_time", "min_cost"]
+    assert body["routes"][0]["days"][0]["timeline"][1]["instruction"].startswith(
+        "Estimated"
+    )
+
+
+def test_optimize_infeasibility_is_http_200_structured_error(client):
+    response = client.post(
+        "/api/optimize",
+        json={
+            "settings": {
+                "transport_mode": "car",
+                "start_date": "2026-09-19",
+                "end_date": "2026-09-19",
+                "start_location": {"name": "Start", "lat": 37.0, "lng": 127.0},
+                "end_location": {"name": "End", "lat": 37.0, "lng": 127.0},
+                "start_time": "10:00",
+                "end_deadline": "10:05",
+            },
+            "places": [
+                {
+                    "place_id": "p1",
+                    "name": "Closed Museum",
+                    "category": "museum",
+                    "lat": 37.0,
+                    "lng": 127.0,
+                    "stay_time_min": 60,
+                    "stay_time_max": 60,
+                    "open_time": "09:00",
+                    "close_time": "10:00",
+                    "hard_constraint": None,
+                    "preference_score": 0,
+                }
+            ],
+        },
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "error",
+        "code": "NO_ROUTE",
+        "message": "No feasible itinerary satisfies all current constraints.",
+        "place_ids": [],
+    }

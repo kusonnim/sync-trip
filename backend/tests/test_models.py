@@ -79,3 +79,26 @@ def test_transport_mode_and_category_are_stable_values():
 def test_hard_constraint_window_order():
     with pytest.raises(ValidationError, match="hard constraint end"):
         HardConstraint(start="18:00", end="17:00")
+
+
+def test_duplicate_place_ids_are_rejected():
+    with pytest.raises(ValidationError, match="place_id values must be unique"):
+        OptimizeRequest(
+            settings=valid_settings(),
+            places=[valid_place(), valid_place()],
+        )
+
+
+def test_deadline_before_start_is_rejected():
+    data = valid_settings()
+    data["end_deadline"] = "09:59"
+    with pytest.raises(ValidationError, match="end_deadline"):
+        TripSettings(**data)
+
+
+def test_closing_before_opening_is_rejected():
+    data = valid_place()
+    data["open_time"] = "18:00"
+    data["close_time"] = "17:00"
+    with pytest.raises(ValidationError, match="close_time"):
+        Place(**data)

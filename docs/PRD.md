@@ -4,7 +4,7 @@
 
 This product definition combines three source materials: the original planning document, handwritten notes, and the user-flow diagram. [PROJECT.md](../PROJECT.md) is the canonical source for API contracts and algorithm behavior; if this document differs, follow PROJECT.md.
 
-The frontend currently supports the complete ten-step flow. The Phase 1 backend provides Kakao place search and Google business-hours lookup, while a temporary frontend optimizer still returns the Phase 2 response shape.
+The frontend supports the complete ten-step flow. The Phase 2 backend provides Kakao place search, Google business-hours lookup, and Track 1 route optimization. The frontend mock remains an offline development fallback.
 
 **Problem:** Place links pile up in group chats without producing a finalized plan. Existing travel apps usually sort by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM.
 
@@ -120,7 +120,7 @@ PROJECT.md section 4.3 defines the exact request and response fields. Return bot
 
 ### 4.1 Day Assignment
 
-Choose the most geographically separated places as seeds, one per trip day. Assign every remaining place to its nearest seed without exceeding four places per day, then optimize each day independently. Assume the same start and end locations every day; lodging logic is out of scope.
+Choose the most geographically separated places as seeds, one per trip day. Assign every remaining place to its nearest available seed with balanced bucket capacity, then optimize each day independently. Four places per day is the normal product target, while exhaustive search supports at most six. Inputs that cannot respect that limit are rejected explicitly, and candidates are never truncated or discarded. Assume the same start and end locations every day; lodging logic is out of scope.
 
 Places with reservations cannot yet be pinned to a specific day. Assignment currently uses coordinates only.
 
@@ -144,26 +144,17 @@ start  = max(arrive, open_time, hard_constraint.start)
     Hard: require start + stay_time_min <= close_time
     Hard: restaurants must start during lunch (11:30–13:30)
           or dinner (17:30–19:30)
-depart = start + stay          // Use stay_time_min; extend toward stay_time_max when possible
+depart = start + stay_time_min // Phase 2 does not allocate optional extra stay time
 final: require arrival at end_location <= end_deadline
 ```
 
 Meal windows are validated by **start time**, not overlap, so a visit cannot qualify by touching only the end of the window.
 
-Score surviving permutations with:
+Rank surviving permutations directly. `min_time` uses travel duration, then cost, then stable place order. `min_cost` uses estimated cost, then travel duration, then stable place order. No unexplained weighted scalar combines minutes and KRW.
 
-```text
-J = wt × total travel minutes + wc × total cost − wp × sum(preference_score)
-```
+Borda scores select the candidate set before `/api/optimize`. The sum of `preference_score` is constant across permutations of that set, so Phase 2 correctly excludes it from route-order ranking while preserving the field in the API contract.
 
-`preference_score` is the group's Borda total. Its weight is 3 and breaks ties in favor of group preferences. Best-time bonuses are not yet implemented.
-
-| Route | wt | wc | Goal |
-|---|---:|---:|---|
-| `min_time` | 1.0 | 0.0 | Minimum travel time |
-| `min_cost` | 0.2 | 0.1 | Minimum cost |
-
-If both objectives choose the same permutation, use the next-ranked permutation so the group always receives two distinct options. Searching 720 permutations across three days takes less than 0.1 seconds in Python.
+If both objectives choose the same permutation, use the next-ranked valid `min_cost` permutation when one exists. If exactly one complete route is feasible, returning the same order for both entries is preferable to inventing or rejecting a route.
 
 ### 4.3 Track 2 — Precise Routing
 
@@ -181,12 +172,13 @@ Track 2 belongs in the backend and is not implemented. The current timeline uses
 Do not return a generic no-route message when no permutations survive. First examine every pair of places with fixed reservations:
 
 ```text
-for i, j in pairs of places with hard_constraint:
-    if |start_j − start_i| < travel(i, j) + stay_time_min_i:
+for each reservation pair in an allocated day:
+    earlier, later = chronological_order(pair)
+    if earlier.start + earlier.stay_time_min + travel(earlier, later) > later.end:
         return TIME_CONFLICT with both IDs in place_ids
 ```
 
-Example: “The 18:00 reservation at the Seongsu restaurant conflicts with the 18:10 reservation at N Seoul Tower. Travel requires 32 minutes. Adjust one reservation.” Diagnose closing-time and deadline failures similarly.
+Example: “The reservation at the Seongsu restaurant conflicts with the reservation at N Seoul Tower.” Closing-time, meal-window, and deadline failures without a specific reservation pair return structured `NO_ROUTE` errors.
 
 This pairwise check is O(m²), much cheaper than permutation search, so run it **before** the search to catch obvious conflicts early.
 
@@ -222,15 +214,11 @@ The frontend portion of the nine-hour build is complete. Remaining work is split
 
 | Priority | Work | Owner | Notes |
 |---:|---|---|---|
-| 1 | FastAPI skeleton, CORS, and `/api/optimize` stub | Backend | Create the stub first so the frontend can connect |
-| 2 | Kakao Local proxy at `/api/search` | Backend | Replaces the 16 mock places immediately |
-| 3 | Python optimizer: Track 1 and conflict diagnosis | Backend | Match the temporary frontend engine |
-| 4 | Connect frontend and backend through `VITE_API_BASE` | Shared | Minimum viable live demo |
-| 5 | Track 2 live routing with ODsay and Kakao Mobility | Backend | Adds line names to the timeline |
-| 6 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
-| 7 | Google Places hours at `/api/place/details` | Backend | Requires cost approval before live calls |
-| 8 | Map markers and routes | Frontend | Above the cut line if time remains |
-| 9 | Result-image export | Frontend | First feature to drop |
+| 1 | Connect deployed frontend and backend through `VITE_API_BASE` | Shared | Backend contract is ready |
+| 2 | Track 2 live routing with ODsay and Kakao Mobility | Backend | Adds provider route details |
+| 3 | Firestore integration | Frontend | Replace only `roomStore.js` function bodies |
+| 4 | Map markers and routes | Frontend | Above the cut line if time remains |
+| 5 | Result-image export | Frontend | First feature to drop |
 
 Firestore appears lower in this list, but it is required for a multi-device demo. A two-tab demo on one machine works with the current implementation, so choose the demo format before reprioritizing.
 
@@ -244,10 +232,12 @@ Firestore appears lower in this list, but it is required for a multi-device demo
 - FastAPI application with safe CORS, environment validation, and a health endpoint
 - Kakao Local search proxy and cached Google Places business-hours lookup
 - Phase 1 backend tests with mocked provider calls
+- Phase 2 Track 1 backend optimizer and `POST /api/optimize`
+- Deterministic day assignment, exhaustive permutation search, constraint simulation, and conflict diagnosis
 
 ### Cut Line
 
-**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. **The current frontend already meets this line.** The temporary engine can support the demo if the backend is late.
+**Must work:** room creation and entry, place search and ranking, two constraint-valid route options, daily timelines, final voting, and confirmation. The frontend and Phase 2 backend now meet this line; the temporary frontend engine remains available for an offline demo.
 
 **Drop in this order if delayed:**
 
@@ -263,7 +253,7 @@ Dropping Track 2 removes the public-transit accuracy claim, so remove maps and i
 
 ## 7. Verification
 
-**Algorithm checks:** `npm run check` runs 14 checks without external APIs, and all currently pass. When the backend engine is implemented, run equivalent Python checks. The script is `frontend/scripts/check-optimizer.mjs`.
+**Algorithm checks:** `npm run check` runs the original 14 frontend checks without external APIs. The backend pytest suite adds regression coverage for Phase 2 behavior and also makes no routing-provider calls.
 
 1. A reserved place starts within its reservation window.
 2. A permutation that cannot fit the minimum stay before closing is rejected with `NO_ROUTE`.

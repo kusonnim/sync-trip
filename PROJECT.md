@@ -31,10 +31,10 @@
 
 Separated structure between the frontend and the algorithm computation backend.
 
-**Build status:** the frontend runs the whole flow on its own. The Phase 1 backend provides the
-FastAPI application, health check, Kakao Local search proxy, and Google Places business-hours
-lookup. Route optimization is not implemented in the backend yet, so the frontend continues to
-answer `/api/optimize` with `src/lib/mockOptimize.js` until Phase 2.
+**Build status:** the frontend runs the whole flow on its own, and the Phase 2 backend provides the
+FastAPI application, health check, Kakao Local search proxy, Google Places business-hours lookup,
+and Track 1 optimization. Setting `VITE_API_BASE` routes all three frontend API calls to the backend;
+`src/lib/mockOptimize.js` remains an offline development fallback.
 
 ```text
 📦 SyncTrip
@@ -54,11 +54,12 @@ answer `/api/optimize` with `src/lib/mockOptimize.js` until Phase 2.
  ┃ ┃ ┗ 📜 check-optimizer.mjs # Constraint checks, run with `npm run check`
  ┃ ┗ 📜 package.json
  ┃
- ┗ 📂 backend/ (Python FastAPI) — Phase 1 place information APIs
+ ┗ 📂 backend/ (Python FastAPI) — Phase 2 place APIs and Track 1 optimizer
    ┣ 📂 app/
    ┃ ┣ 📜 main.py          # FastAPI application and CORS setup
-   ┃ ┣ 📂 api/             # Search and business-hours routes
-   ┃ ┣ 📂 models/          # API and future optimization request models
+   ┃ ┣ 📂 api/             # Search, business-hours, and optimization routes
+   ┃ ┣ 📂 models/          # Explicit API request and response models
+   ┃ ┣ 📂 optimizer/       # Day splitting, estimation, constraints, scoring, conflicts
    ┃ ┗ 📂 services/        # Kakao Local and Google Places adapters
    ┣ 📜 requirements.txt   # FastAPI, Uvicorn, Requests, etc.
    ┗ 📜 .env               # API Key storage (never committed)
@@ -126,7 +127,9 @@ departure time and the daily "everyone goes home" deadline, applied to every day
 
 Business hours travel on the place object itself (`open_time` / `close_time`), so `hard_constraint`
 means only a user-entered reservation window and is `null` for most places.
-`preference_score` is the summed Borda score from the team's rankings; use it to break ties.
+`preference_score` is the summed Borda score used to select candidates before optimization. It is
+preserved in this contract but is not an order tiebreaker: every permutation contains the same
+places, so its aggregate is constant.
 
 ```json
 {
@@ -193,7 +196,7 @@ travel day, and each day holds the alternating place / transit timeline.
           "total_cost": 8600,
           "timeline": [
             { "type": "place", "name": "Seoul Station", "time": "10:00" },
-            { "type": "transit", "mode": "transit", "instruction": "Bus 1003 board", "time": "10:00 ~ 10:45", "duration": 45, "cost": 1500 },
+            { "type": "transit", "mode": "transit", "instruction": "Estimated transit leg", "time": "10:00 ~ 10:45", "duration": 45, "cost": 1500 },
             { "type": "place", "place_id": "kakao_12345", "name": "Haedong Yonggungsa", "category": "attraction", "time": "10:45 ~ 12:15", "stay_duration": 90, "wait_duration": 0 }
           ]
         }
@@ -230,28 +233,29 @@ Never return a bare "no route found". Name the two places that collide so the us
 
 ---
 
-## 5. Algorithm Logic Summary (`optimizer.py` Skeleton)
+## 5. Algorithm Logic Summary (Phase 2 Track 1)
 
-0. **Day Splitting (runs first):** Cluster the candidate places by coordinate into as many groups as there are travel days, cap each group at 4 places, then run everything below once per day. Every day starts at `start_location` and ends at `end_location`.
+0. **Day Splitting (runs first):** Cluster every candidate by coordinate into as many groups as there are travel days, targeting the normal four places per day. Exhaustive search supports at most six places per day (`6! = 720`). Reject larger inputs explicitly; never truncate or discard candidates. Every day starts at `start_location` and ends at `end_location`.
 
 1. **Two-Track Routing Strategy:**
-* **Track 1 (Fast Permutation Calculation):** Use static average travel times to quickly evaluate all permutations (e.g., $120$ combinations for 5 places) in under 0.1 seconds to isolate the optimal orders.
+* **Track 1 (Fast Permutation Calculation):** Use static average travel times to evaluate every permutation, up to 720 combinations for six places, and isolate the optimal orders.
 * **Track 2 (Precise Timeline Generation):** Run dynamic transit/car routing APIs sequentially only on the winning routes to construct accurate step-by-step timetables. Cache by `(origin, destination, mode)` so the two options share calls on legs they have in common.
 
 
 2. **Hard Constraint Validation:**
-* Check if arrival happens later than a place's closing time, or if the minimum stay does not fit before `close_time`.
-* Check if arrival falls within the user-defined reservation window (`hard_constraint`).
-* Force restaurants into a lunch (11:30–13:30) or dinner (17:30–19:30) start.
+* Wait when arrival is before opening, then require the entire minimum stay to fit before `close_time`.
+* Wait for an upcoming reservation when early, and require the actual visit start to remain within its window.
+* Wait for restaurants until lunch (11:30–13:30) or dinner (17:30–19:30), and validate the visit start rather than interval overlap.
+* Schedule exactly `stay_time_min`; `stay_time_max` remains a validated upper bound for future slack allocation.
 * Check that returning to `end_location` lands before `end_deadline`.
 * Drop violating routes immediately using `continue`.
 
 
 3. **Final Selection:** Score the surviving permutations twice and return **two** routes.
-* `min_time` — rank by total travel minutes.
-* `min_cost` — rank by total transit cost, with travel time as a light tiebreaker.
-* Subtract `preference_score` from both rankings so the team's favourites win ties.
-* If both objectives land on the same order, give `min_cost` the next-best distinct order so the user always has two real choices.
+* `min_time` — rank lexicographically by total travel minutes, then cost, then stable place order.
+* `min_cost` — rank lexicographically by total estimated cost, then travel time, then stable place order.
+* Borda preferences select candidates before this endpoint. Do not subtract the constant `sum(preference_score)` from permutation scores.
+* If both objectives land on the same order, give `min_cost` the next-best valid distinct order. If only one valid route exists, return it in both entries.
 
 
-4. **Conflict Diagnosis (before the permutation search):** Compare every pair of places that has a `hard_constraint`. If the gap between the two reservation times is smaller than the travel time plus the first place's minimum stay, return `TIME_CONFLICT` naming both places. This check is $O(m^2)$ and far cheaper than the search, so run it first.
+4. **Conflict Diagnosis (before the permutation search):** Compare every pair of reserved places within each allocated day. Determine the chronologically earlier reservation first, then check its minimum stay plus travel against the later window end. Return `TIME_CONFLICT` naming both places when impossible. Other infeasibility returns `NO_ROUTE`.

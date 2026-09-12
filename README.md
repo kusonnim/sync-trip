@@ -6,17 +6,17 @@ Each traveler ranks the places they want to visit. SyncTrip combines those prefe
 
 ## Current Status
 
-The frontend supports the complete ten-step flow. The Phase 1 FastAPI backend provides place search and business-hours lookup; route optimization remains on the temporary frontend engine until Phase 2 is complete.
+The frontend supports the complete ten-step flow. The Phase 2 FastAPI backend now provides place search, business-hours lookup, and deterministic Track 1 route optimization.
 
 | Area | Status |
 |---|---|
 | Ten-step frontend flow | Complete |
-| Optimization engine | Temporary frontend implementation; all 14 constraint checks pass |
+| Optimization engine | Phase 2 backend Track 1 implementation; frontend mock retained for offline development |
 | Real-time room-state synchronization | Uses localStorage and synchronizes tabs in the same browser |
 | Firestore | Not connected |
-| FastAPI backend | Phase 1 complete: health, Kakao place search, and Google business-hours lookup |
+| FastAPI backend | Phase 2 complete: health, place APIs, and `POST /api/optimize` |
 | Live Kakao and Google place APIs | Available when backend keys are configured; automated tests use mocks |
-| ODsay and Kakao Mobility | Not connected; routing uses frontend distance-based estimates |
+| ODsay and Kakao Mobility | Not connected; Track 1 uses backend distance-based estimates |
 | Map and result-image export | Not implemented |
 
 ## Run Locally
@@ -64,7 +64,7 @@ frontend/           React application (implemented)
   src/components/   Timeline, route card, and conflict notice
   src/lib/          Optimizer, room store, and API client
   scripts/          Constraint-check scripts
-backend/            FastAPI server with place APIs (Phase 1)
+backend/            FastAPI server with place APIs and Track 1 optimizer (Phase 2)
 docs/               PRD and original reference material
 ```
 
@@ -72,7 +72,7 @@ docs/               PRD and original reference material
 
 The frontend already sends and receives data according to the contract in PROJECT.md section 4. Two integration points remain:
 
-1. Set `VITE_API_BASE` in `frontend/.env` after Phase 2 is implemented to disable the temporary optimizer and call all backend APIs.
+1. Set `VITE_API_BASE` in `frontend/.env` to disable the temporary optimizer and call all three backend APIs.
 2. Replace the function bodies in `frontend/src/lib/roomStore.js` with Firestore calls. The screen components do not need to change.
 
 ## Key Management
