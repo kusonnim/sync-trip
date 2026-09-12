@@ -7,6 +7,7 @@ export default function ConflictNotice({ error, places = [] }) {
     TIME_CONFLICT: '방문 시간이 서로 부딪힙니다',
     NO_ROUTE: '시간 안에 들어가는 순서가 없습니다',
     REQUEST_FAILED: '경로를 계산하지 못했습니다',
+    ACCOMMODATION_IGNORED: '숙소가 일정에 반영되지 않았습니다',
   };
   const named = places.filter((p) => error.placeIds?.includes(p.id));
 

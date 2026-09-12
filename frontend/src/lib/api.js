@@ -89,11 +89,47 @@ export function buildOptimizeBody(room, candidates) {
   };
 }
 
+const stopsOf = (day) => day.timeline.filter((entry) => entry.type === 'place');
+
+/**
+ * A router that does not understand `accommodations` ignores the field and sends
+ * every day back to the trip's start and end. That reads as a perfectly ordinary
+ * itinerary, so nothing downstream notices. Check the answer against the question
+ * and say so, rather than showing a plan the group never asked for.
+ */
+export function findAccommodationMismatch(body, result) {
+  const stays = body.settings.accommodations ?? [];
+  const days = result.routes?.[0]?.days ?? [];
+  if (!stays.length || days.length < 2) return null;
+
+  const stayNames = new Set(stays.map((stay) => stay.name));
+  const wrong = days.findIndex((day, index) => {
+    const stops = stopsOf(day);
+    if (!stops.length) return false;
+    const startsAtStay = index > 0 && !stayNames.has(stops[0].name);
+    const endsAtStay = index < days.length - 1 && !stayNames.has(stops.at(-1).name);
+    return startsAtStay || endsAtStay;
+  });
+  if (wrong < 0) return null;
+
+  return {
+    status: 'error',
+    code: 'ACCOMMODATION_IGNORED',
+    message:
+      '경로 계산 서버가 숙소를 반영하지 않았습니다. ' +
+      `${days[wrong].date} 일정이 숙소에서 시작하거나 끝나지 않습니다. ` +
+      '서버가 최신 버전인지 확인해 주세요.',
+    place_ids: [],
+  };
+}
+
 /** PROJECT.md ③ POST /api/optimize */
 export async function optimize(body) {
   if (USE_MOCK) {
     await new Promise((r) => setTimeout(r, 900));
     return optimizeLocally(body);
   }
-  return request('/api/optimize', { method: 'POST', body: JSON.stringify(body) });
+  const result = await request('/api/optimize', { method: 'POST', body: JSON.stringify(body) });
+  if (result?.status !== 'success') return result;
+  return findAccommodationMismatch(body, result) ?? result;
 }

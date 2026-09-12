@@ -4,6 +4,7 @@
 // must pass the same checks once it is connected.
 
 import { optimizeLocally, findConflicts } from '../src/lib/mockOptimize.js';
+import { findAccommodationMismatch } from '../src/lib/api.js';
 import { TOP_N, scorePlaces, pickCandidates } from '../src/lib/preference.js';
 import { toMinutes, daysBetween } from '../src/lib/time.js';
 
@@ -294,6 +295,42 @@ const stopsOf = (route) =>
         && days[1].timeline.at(-1).name === HOTEL.name,
       res.status === 'success' ? `${days[1].timeline.at(0).name} → ${days[1].timeline.at(-1).name}` : res.code);
   }
+}
+
+// A router that ignores `accommodations` sends every day back to the trip's start
+// and end. That looks like an ordinary itinerary, so it has to be caught by name.
+{
+  const SEOUL_STOP = { type: 'place', name: SEOUL.name, time: '10:00' };
+  const HOTEL_STOP = { type: 'place', name: HOTEL.name, time: '18:00' };
+  const body = { settings: { accommodations: [HOTEL] } };
+  const day = (date, first, last) => ({ date, timeline: [first, last] });
+
+  const ignored = findAccommodationMismatch(body, {
+    routes: [{ days: [
+      day('2026-09-19', SEOUL_STOP, SEOUL_STOP),
+      day('2026-09-20', SEOUL_STOP, SEOUL_STOP),
+      day('2026-09-21', SEOUL_STOP, SEOUL_STOP),
+    ] }],
+  });
+  // The first day is already wrong: it should end at the accommodation.
+  check('Catch a router that ignored the accommodation',
+    ignored?.code === 'ACCOMMODATION_IGNORED' && ignored.message.includes('2026-09-19'),
+    ignored?.message ?? 'no mismatch reported');
+
+  const honoured = findAccommodationMismatch(body, {
+    routes: [{ days: [
+      day('2026-09-19', SEOUL_STOP, HOTEL_STOP),
+      day('2026-09-20', HOTEL_STOP, HOTEL_STOP),
+      day('2026-09-21', HOTEL_STOP, SEOUL_STOP),
+    ] }],
+  });
+  check('Leave a correctly anchored itinerary alone', honoured === null,
+    honoured ? honoured.code : 'unchanged');
+
+  // A day trip has no night, so there is nothing to compare against.
+  check('A day trip is never flagged',
+    findAccommodationMismatch({ settings: { accommodations: [] } },
+      { routes: [{ days: [day('2026-09-19', SEOUL_STOP, SEOUL_STOP)] }] }) === null);
 }
 
 console.log(failed ? `\n${failed} checks failed` : '\nAll checks passed');
