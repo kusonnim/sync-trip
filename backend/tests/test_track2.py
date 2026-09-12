@@ -3,7 +3,7 @@ import pytest
 from app.optimizer.engine import optimize_trip
 from app.optimizer.refine import optimize_trip_precise, refine_day
 from app.routing.models import RoutedLeg
-from app.routing.router import RoutingService
+from app.routing.router import SAME_LOCATION_TOLERANCE_METERS, RoutingService
 from app.services.errors import ProviderAuthenticationError, ProviderTimeoutError
 from tests.optimizer_helpers import place, request, settings
 
@@ -238,11 +238,90 @@ class CountingProvider:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("mode", ["transit", "car"])
+@pytest.mark.parametrize("latitude_offset", [0.0, 0.00005])
+async def test_same_and_near_identical_legs_are_zero_without_provider_call(
+    settings,
+    mode,
+    latitude_offset,
+):
+    provider = CountingProvider()
+    routing = RoutingService(settings, kakao=provider, odsay=provider)
+    origin = request([]).settings.start_location
+    destination = origin.model_copy(
+        update={"name": "Same physical place", "lat": origin.lat + latitude_offset}
+    )
+
+    result = await routing.route(origin, destination, mode)
+
+    assert SAME_LOCATION_TOLERANCE_METERS == 10.0
+    assert result == RoutedLeg(0, 0, 0.0, "Already at destination", "local")
+    assert provider.calls == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ["transit", "car"])
+async def test_leg_outside_same_location_tolerance_uses_provider(settings, mode):
+    provider = CountingProvider()
+    routing = RoutingService(settings, kakao=provider, odsay=provider)
+    origin = request([]).settings.start_location
+    destination = origin.model_copy(
+        update={"name": "Nearby distinct place", "lat": origin.lat + 0.0002}
+    )
+
+    result = await routing.route(origin, destination, mode)
+
+    assert result.duration_minutes == 12
+    assert provider.calls == 1
+
+
+@pytest.mark.anyio
+async def test_precise_transit_keeps_visit_at_start_location_feasible(settings):
+    provider = CountingProvider()
+    routing = RoutingService(settings, odsay=provider)
+    seoul_station_visit = place(
+        "seoul-station",
+        name="Seoul Station",
+        lat=37.5547,
+        lng=126.9707,
+        stay_time_min=30,
+    )
+    korea_university = place(
+        "korea-university",
+        name="Korea University Seoul Campus",
+        lat=37.5895,
+        lng=127.0324,
+        stay_time_min=30,
+    )
+
+    result = await optimize_trip_precise(
+        request(
+            [seoul_station_visit, korea_university],
+            transport_mode="transit",
+            start_time="10:00",
+            end_deadline="21:00",
+        ),
+        routing,
+    )
+
+    assert result.status == "success"
+    assert "seoul-station" in visits(result.routes[0])
+    zero_legs = [
+        item
+        for item in result.routes[0].days[0].timeline
+        if item.type == "transit" and item.duration == 0
+    ]
+    assert zero_legs
+    assert all(item.cost == 0 for item in zero_legs)
+    assert provider.calls > 0
+
+
+@pytest.mark.anyio
 async def test_shared_legs_hit_routing_service_cache(settings):
     provider = CountingProvider()
     routing = RoutingService(settings, odsay=provider)
     origin = request([]).settings.start_location
-    destination = place("a")
+    destination = place("a", lng=127.0)
     await routing.route(origin, destination, "transit")
     await routing.route(origin, destination, "transit")
     assert provider.calls == 1
@@ -264,7 +343,7 @@ async def test_provider_failures_do_not_poison_routing_cache(settings):
     provider = FlakyProvider()
     routing = RoutingService(settings, odsay=provider)
     origin = request([]).settings.start_location
-    destination = place("a")
+    destination = place("a", lng=127.0)
     with pytest.raises(ProviderTimeoutError):
         await routing.route(origin, destination, "transit")
     result = await routing.route(origin, destination, "transit")
