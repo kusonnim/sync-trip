@@ -1,0 +1,60 @@
+# [Hackathon Plan] Social-Voting Travel Route Optimization with Time Windows (Working Title: SyncTrip)
+
+## 1. Service Overview (Background and Problem)
+
+- **Target users:** University students and people in their 20s and 30s planning group trips, retreats, or trips with friends.
+- **Problems to solve:**
+  1. **Social coordination:** Place links accumulate in group chats, making it difficult to consolidate opinions and finalize an itinerary.
+  2. **Limitations of existing services:** Travel apps such as Triple generally sort places by distance and cannot account for constraints such as a 6:00 PM restaurant reservation or a museum closing at 5:00 PM. Public-transit routes must also be searched separately from the itinerary tool.
+- **Solution:** Members vote on places in real time to narrow the candidates. The service combines business hours with user-entered reservation constraints and automatically produces public-transit or driving timelines that minimize travel while respecting every time constraint.
+
+---
+
+## 2. Core User Flow
+
+1. **Fast room creation and entry:** Join a session without an account by entering a four-character room code and a nickname.
+2. **Shared place list and real-time voting:** Members search for places, add them to a shared list, and vote with a limited number of likes. The five to seven highest-ranked places are selected in real time.
+3. **Hybrid constraint entry (API plus manual override):**
+   - **Automatic:** Load the selected places' standard business hours from Google Places or a similar API.
+   - **Manual override:** If API data is missing or a special constraint applies, such as a 6:00 PM dinner reservation, the host enters the visit time manually.
+4. **Route optimization and timeline generation:** After the user selects driving or public transit, the algorithm produces the shortest feasible visit order and displays it with live routing details in a timeline UI.
+
+---
+
+## 3. Feature Details and Policies
+
+- **Separate start and end locations with a deadline:** Users may choose different start and final destinations and configure both a departure time and a trip deadline, such as finishing by 9:00 PM.
+- **Flexible stay-duration policy:** Each place category has a default stay duration, while users can edit the minimum and maximum stay for individual places.
+- **Actionable conflict handling:** For an impossible schedule—for example, Restaurant A reserved at 6:00 PM, Viewpoint B reserved at 6:10 PM, and a 30-minute trip between them—the app identifies the conflict and asks the user to adjust a time instead of returning a generic no-route message.
+
+---
+
+## 4. Core Technology and Algorithm
+
+**1) Multi-Constraint Search**
+
+- **Hard constraints:** User-entered reservation times and venue closing times. Any route that violates them is rejected.
+- **Soft constraints:** A preferred visit time for a place. Matching it adds to the route score.
+- **Context-aware restaurant placement:** Restaurant visits must fall within lunch (11:30–13:30) or dinner (17:30–19:30) windows.
+
+**2) Two-Track Public-Transit Routing**
+
+The two-stage design avoids the latency and API limits that would result from querying a live public-transit API for all 120 visit orders of five places.
+
+- **Track 1—order selection estimate:** Use fixed average travel times proportional to distance to choose the best of 120 visit orders in about 0.1 seconds.
+- **Track 2—precise timeline calls:** Call the live routing API sequentially only for the selected route while calculating arrival and stay times. This provides fast, accurate transfer and step-by-step route data in the UI.
+
+---
+
+## 5. Recommended Stack and Deployment
+
+- **Frontend:** React or Vanilla JavaScript, optimized for a mobile web view and deployed with GitHub Pages or Vercel
+- **Database:** Firebase Firestore for voting and real-time synchronization without a custom server
+- **Backend and algorithm:** Python with FastAPI or Flask for time calculations and the two-track algorithm
+- **External APIs:** Kakao or Naver Mobility for travel distance and transit routes, and Google Places for business hours
+
+---
+
+## 6. Competitive Advantage
+
+Existing apps typically offer only distance sorting or manual schedule editing. SyncTrip combines votes from multiple travelers and mathematically solves constraints such as restaurant reservations and venue closing times. Its two-track algorithm balances public-transit accuracy and speed, while hybrid API and manual data entry reflect how university students actually plan group trips.

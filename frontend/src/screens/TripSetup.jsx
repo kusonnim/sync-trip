@@ -10,15 +10,15 @@ export default function TripSetup() {
   const navigate = useNavigate();
   const [form, setForm] = useState({
     hostNickname: '',
-    title: '우리 여행',
+    title: 'Our Trip',
     startDate: today,
     endDate: today,
     dailyStart: '10:00',
     dailyEnd: '21:00',
     headcount: 4,
     transportMode: 'transit',
-    originName: '서울역',
-    destinationName: '서울역',
+    originName: 'Seoul Station',
+    destinationName: 'Seoul Station',
   });
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
@@ -26,7 +26,7 @@ export default function TripSetup() {
   const ready = form.hostNickname.trim() && form.endDate >= form.startDate;
 
   function submit() {
-    // 출발지·도착지 좌표는 백엔드의 카카오 로컬 검색이 붙으면 실제 값으로 바뀐다.
+    // Replace these placeholder coordinates when the backend Kakao Local search is connected.
     const room = createRoom({
       ...form,
       headcount: Number(form.headcount),
@@ -39,56 +39,56 @@ export default function TripSetup() {
   return (
     <Screen
       step={2}
-      title="여행 기본정보"
-      subtitle="대표자가 먼저 입력합니다"
-      footer={<button className="btn-primary" disabled={!ready} onClick={submit}>여행방 만들기</button>}
+      title="Trip Details"
+      subtitle="The host sets these details first"
+      footer={<button className="btn-primary" disabled={!ready} onClick={submit}>Create Trip Room</button>}
     >
       <div className="card">
         <label className="field">
-          <span>내 닉네임</span>
-          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="예: 재은" />
+          <span>Your Nickname</span>
+          <input value={form.hostNickname} onChange={set('hostNickname')} placeholder="e.g., Jamie" />
         </label>
         <label className="field">
-          <span>여행 이름</span>
+          <span>Trip Name</span>
           <input value={form.title} onChange={set('title')} />
         </label>
       </div>
 
       <div className="card">
-        <div className="card-title">날짜와 시간</div>
+        <div className="card-title">Dates and Times</div>
         <div className="row">
           <label className="field">
-            <span>시작일</span>
+            <span>Start Date</span>
             <input type="date" value={form.startDate} onChange={set('startDate')} />
           </label>
           <label className="field">
-            <span>종료일</span>
+            <span>End Date</span>
             <input type="date" value={form.endDate} onChange={set('endDate')} min={form.startDate} />
           </label>
         </div>
         <div className="row">
           <label className="field">
-            <span>하루 시작</span>
+            <span>Daily Start Time</span>
             <input type="time" value={form.dailyStart} onChange={set('dailyStart')} />
           </label>
           <label className="field">
-            <span>해산 시각</span>
+            <span>Daily Deadline</span>
             <input type="time" value={form.dailyEnd} onChange={set('dailyEnd')} />
           </label>
         </div>
-        <p className="tl-note" style={{ margin: 0 }}>{dayCount}일 일정으로 계산합니다.</p>
+        <p className="tl-note" style={{ margin: 0 }}>We will plan a {dayCount}-day itinerary.</p>
       </div>
 
       <div className="card">
-        <div className="card-title">인원과 이동수단</div>
+        <div className="card-title">Group and Transportation</div>
         <label className="field">
-          <span>인원수</span>
+          <span>Number of Travelers</span>
           <input type="number" min={2} max={12} value={form.headcount} onChange={set('headcount')} />
         </label>
         <label className="field">
-          <span>이동수단</span>
+          <span>Transportation</span>
           <div className="choice-group">
-            {[['transit', '🚌 대중교통'], ['car', '🚗 자차']].map(([value, label]) => (
+            {[['transit', '🚌 Public Transit'], ['car', '🚗 Car']].map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -104,14 +104,14 @@ export default function TripSetup() {
       </div>
 
       <div className="card">
-        <div className="card-title">출발지와 도착지</div>
+        <div className="card-title">Start and End Locations</div>
         <div className="row">
           <label className="field">
-            <span>출발지</span>
+            <span>Start Location</span>
             <input value={form.originName} onChange={set('originName')} />
           </label>
           <label className="field">
-            <span>최종 도착지</span>
+            <span>End Location</span>
             <input value={form.destinationName} onChange={set('destinationName')} />
           </label>
         </div>
